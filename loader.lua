@@ -33,27 +33,26 @@ local offsetX, offsetY = 10, 10
 
 local strikeZoneVisible = false
 local strikeZoneBox = nil
-local ballHighlightBox = nil
 
--- Projection parts list
-local projectionParts = {}
+local ballHighlight = nil
+local projectionPart = nil
 
 -- Trash talk messages
 local trashTalkMessages = {
     "You can't hit nun",
     "Knowledge of a 3rd grader",
-    "Your BA is probably -100",
-    "Can't blame ping on that one son",
-    "Get better",
-    "Womp womp",
+    "your ba is probably -100",
+    "Cant blame ping on that one son",
+    "get better",
+    "womp womp",
     "IQ of a Packet Loss",
     "Rando Pooron",
-    "Swing and a miss!",
-    "Better luck next time!",
-    "You’re batting .000 in my heart",
+    "Swing and miss!",
+    "Bet you wish you had my stats",
+    "My grandma hits better than you",
     "Is that all you got?",
-    "Practice makes perfect — you’re practicing?",
-    "Welcome to my highlight reel!",
+    "You call that a swing?",
+    "Try harder, scrub",
 }
 
 local function sendTrashTalk()
@@ -61,7 +60,7 @@ local function sendTrashTalk()
     SayMessageRequest:FireServer(message, "All")
 end
 
--- Get strike zone adornee from ReplicatedStorage or Workspace fallback
+-- Function to get strike zone adornee (tries ReplicatedStorage.HRDGui.SwingZone module or fallback)
 local function GetStrikeZoneAdornee()
     local hrdGui = ReplicatedStorage:FindFirstChild("HRDGui")
     if hrdGui then
@@ -77,250 +76,7 @@ local function GetStrikeZoneAdornee()
     return Workspace.Terrain
 end
 
--- Updates or creates the strike zone box adornment
-local function UpdateStrikeZoneBox()
-    if strikeZoneVisible then
-        if not strikeZoneBox then
-            strikeZoneBox = Instance.new("BoxHandleAdornment")
-            strikeZoneBox.Size = Vector3.new(4, 4, 4)
-            strikeZoneBox.Transparency = 0.7
-            strikeZoneBox.Color3 = Color3.fromRGB(0, 255, 255)
-            strikeZoneBox.AlwaysOnTop = true
-            strikeZoneBox.ZIndex = 10
-            strikeZoneBox.Adornee = GetStrikeZoneAdornee()
-            strikeZoneBox.Parent = strikeZoneBox.Adornee
-        end
-    else
-        if strikeZoneBox then
-            strikeZoneBox:Destroy()
-            strikeZoneBox = nil
-        end
-    end
-end
-
--- Creates box adornment to highlight the ball
-local function CreateBallHighlight()
-    local ball = Workspace:FindFirstChild("Ball")
-    if ball and not ballHighlightBox then
-        ballHighlightBox = Instance.new("BoxHandleAdornment")
-        ballHighlightBox.Size = ball.Size + Vector3.new(0.5, 0.5, 0.5)
-        ballHighlightBox.Transparency = 0.5
-        ballHighlightBox.Color3 = Color3.fromRGB(255, 100, 100)
-        ballHighlightBox.AlwaysOnTop = true
-        ballHighlightBox.ZIndex = 15
-        ballHighlightBox.Adornee = ball
-        ballHighlightBox.Parent = ball
-    end
-end
-
-local function UpdateBallHighlight()
-    local ball = Workspace:FindFirstChild("Ball")
-    if ball then
-        if not ballHighlightBox or ballHighlightBox.Adornee ~= ball then
-            if ballHighlightBox then ballHighlightBox:Destroy() end
-            CreateBallHighlight()
-        end
-        -- Update size smoothly if needed
-        ballHighlightBox.Size = ball.Size + Vector3.new(0.5, 0.5, 0.5)
-    else
-        if ballHighlightBox then
-            ballHighlightBox:Destroy()
-            ballHighlightBox = nil
-        end
-    end
-end
-
--- Creates neon parts for projection path visualization
-local function CreateProjectionParts()
-    for i = 1, 30 do
-        local part = Instance.new("Part")
-        part.Anchored = true
-        part.CanCollide = false
-        part.Material = Enum.Material.Neon
-        part.Size = Vector3.new(0.3, 0.3, 0.3)
-        part.Transparency = 0.6
-        part.Color = Color3.fromRGB(0, 255, 255)
-        part.Name = "ProjectionPart"
-        part.Parent = Workspace
-        projectionParts[i] = part
-    end
-end
-
--- Updates projection parts positions based on ball velocity and gravity
-local function UpdateProjectionParts()
-    local ball = Workspace:FindFirstChild("Ball")
-    if not ball or not ball.Velocity then
-        for _, part in pairs(projectionParts) do
-            part.Transparency = 1
-        end
-        return
-    end
-
-    local gravity = Workspace.Gravity
-    local startPos = ball.Position
-    local velocity = ball.Velocity
-
-    for i = 1, #projectionParts do
-        local t = i * 0.1
-        -- s = ut + 0.5at^2, vertical with gravity on Y
-        local pos = startPos + velocity * t + Vector3.new(0, -0.5 * gravity * t * t, 0)
-        projectionParts[i].Position = pos
-        projectionParts[i].Transparency = 0.6
-    end
-end
-
--- Fly movement logic with CFrame using camera look vector (including vertical)
-local function FlyMovement(delta)
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    local cam = workspace.CurrentCamera
-    if not cam then return end
-
-    local moveVec = Vector3.new(0,0,0)
-    if flyUp then
-        moveVec = moveVec + Vector3.new(0, 1, 0)
-    end
-    if flyDown then
-        moveVec = moveVec + Vector3.new(0, -1, 0)
-    end
-    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-        moveVec = moveVec + cam.CFrame.LookVector
-    end
-    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-        moveVec = moveVec - cam.CFrame.LookVector
-    end
-    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-        moveVec = moveVec - cam.CFrame.RightVector
-    end
-    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-        moveVec = moveVec + cam.CFrame.RightVector
-    end
-
-    if moveVec.Magnitude > 0 then
-        moveVec = moveVec.Unit * flySpeed * delta
-        hrp.CFrame = hrp.CFrame + moveVec
-    end
-end
-
--- Auto aim logic: smoothly rotate humanoid root part to face ball + offsets
-local function AutoAim()
-    if not autoAimEnabled then return end
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    local ball = Workspace:FindFirstChild("Ball")
-    if not hrp or not ball then return end
-
-    local targetPos = ball.Position + Vector3.new(offsetX, offsetY, 0)
-    local lookDir = (targetPos - hrp.Position)
-    lookDir = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
-    local newCFrame = CFrame.new(hrp.Position, hrp.Position + lookDir)
-    hrp.CFrame = hrp.CFrame:Lerp(newCFrame, 0.3)
-end
-
--- Mag Ball pulls the ball to player's position
-local function MagBall()
-    if not magBallEnabled then return end
-    local ball = Workspace:FindFirstChild("Ball")
-    local char = LocalPlayer.Character
-    if not ball or not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    local bodyPos = ball:FindFirstChild("MagBodyPosition")
-    if not bodyPos then
-        bodyPos = Instance.new("BodyPosition")
-        bodyPos.Name = "MagBodyPosition"
-        bodyPos.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-        bodyPos.P = 3000
-        bodyPos.D = 100
-        bodyPos.Parent = ball
-    end
-
-    bodyPos.Position = hrp.Position + Vector3.new(0, 3, 0)
-end
-
--- Remove mag ball effect if disabled
-local function RemoveMagBall()
-    local ball = Workspace:FindFirstChild("Ball")
-    if ball then
-        local bp = ball:FindFirstChild("MagBodyPosition")
-        if bp then bp:Destroy() end
-    end
-end
-
--- Swing bat function (detects bat tool in backpack or character, then triggers swing)
-local function SwingBat()
-    local char = LocalPlayer.Character
-    if not char then return end
-
-    -- Try tool in hand
-    local tool = char:FindFirstChildOfClass("Tool")
-    if not tool then
-        -- Try backpack
-        local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-        if backpack then
-            for _, t in ipairs(backpack:GetChildren()) do
-                if t:IsA("Tool") and string.find(t.Name:lower(), "bat") then
-                    tool = t
-                    break
-                end
-            end
-        end
-    end
-
-    if tool and tool:FindFirstChild("Swing") and tool.Swing:IsA("RemoteEvent") then
-        -- Fire remote to swing (if exists)
-        tool.Swing:FireServer()
-    else
-        -- Otherwise try to activate tool normally
-        if tool and tool.Activate then
-            tool:Activate()
-        end
-    end
-end
-
--- Auto hit function (left click simulation or tool swing)
-local function AutoHit()
-    if not autoHitEnabled then return end
-    local ball = Workspace:FindFirstChild("Ball")
-    local char = LocalPlayer.Character
-    if not ball or not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    local dist = (ball.Position - hrp.Position).Magnitude
-    if dist < 30 then
-        -- Swing bat automatically when close
-        SwingBat()
-    end
-end
-
--- Input handling for fly up/down keys and left click for swing
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Space then
-        flyUp = true
-    elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
-        flyDown = true
-    elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if autoHitEnabled then
-            SwingBat()
-        end
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == Enum.KeyCode.Space then
-        flyUp = false
-    elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
-        flyDown = false
-    end
-end)
-
--- Setup Rayfield UI window and tabs
+-- Create the UI window
 local Window = Rayfield:CreateWindow({
     Name = "⚾ HCBB Utility",
     LoadingTitle = "Loading HCBB Utility",
@@ -329,76 +85,93 @@ local Window = Rayfield:CreateWindow({
         Enabled = true,
         FolderName = nil,
         FileName = "HCBBConfig"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "",
+        RememberJoins = true
     }
 })
 
 -- Movement Tab
 local MovementTab = Window:CreateTab("Movement", 4483345998)
-MovementTab:CreateSlider({
+
+local WalkSpeedSlider = MovementTab:CreateSlider({
     Name = "WalkSpeed",
     Range = {16, 30},
     Increment = 1,
     Suffix = "WalkSpeed",
-    CurrentValue = walkSpeed,
+    CurrentValue = 16,
     Flag = "WalkSpeed",
     Callback = function(value)
         walkSpeed = value
     end
 })
-MovementTab:CreateToggle({
+
+local WalkSpeedToggle = MovementTab:CreateToggle({
     Name = "Enable WalkSpeed",
-    CurrentValue = walkSpeedEnabled,
+    CurrentValue = false,
     Flag = "WalkSpeedToggle",
     Callback = function(value)
         walkSpeedEnabled = value
         if not value then
             local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then hum.WalkSpeed = 16 end
+            if hum then
+                hum.WalkSpeed = 16
+            end
         end
     end
 })
-MovementTab:CreateSlider({
+
+local JumpPowerSlider = MovementTab:CreateSlider({
     Name = "JumpPower",
     Range = {50, 100},
     Increment = 1,
     Suffix = "JumpPower",
-    CurrentValue = jumpPower,
+    CurrentValue = 50,
     Flag = "JumpPower",
     Callback = function(value)
         jumpPower = value
     end
 })
-MovementTab:CreateToggle({
+
+local JumpPowerToggle = MovementTab:CreateToggle({
     Name = "Enable JumpPower",
-    CurrentValue = jumpPowerEnabled,
+    CurrentValue = false,
     Flag = "JumpPowerToggle",
     Callback = function(value)
         jumpPowerEnabled = value
         if not value then
             local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then hum.JumpPower = 50 end
+            if hum then
+                hum.JumpPower = 50
+            end
         end
     end
 })
-MovementTab:CreateSlider({
+
+local HipHeightSlider = MovementTab:CreateSlider({
     Name = "HipHeight",
     Range = {0, 10},
     Increment = 0.1,
     Suffix = "studs",
-    CurrentValue = hipHeight,
+    CurrentValue = 2,
     Flag = "HipHeight",
     Callback = function(value)
-        hipHeight = value
         local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then hum.HipHeight = hipHeight end
+        hipHeight = value
+        if hum then
+            hum.HipHeight = hipHeight
+        end
     end
 })
 
 -- Fly Tab
 local FlyTab = Window:CreateTab("Fly", 4483345998)
-FlyTab:CreateToggle({
+
+local FlyToggle = FlyTab:CreateToggle({
     Name = "Enable Fly",
-    CurrentValue = flyEnabled,
+    CurrentValue = false,
     Flag = "FlyToggle",
     Callback = function(value)
         flyEnabled = value
@@ -406,19 +179,15 @@ FlyTab:CreateToggle({
         if hum then
             hum.PlatformStand = value
         end
-        if not value then
-            -- Reset fly movement state
-            flyUp = false
-            flyDown = false
-        end
     end
 })
-FlyTab:CreateSlider({
+
+local FlySpeedSlider = FlyTab:CreateSlider({
     Name = "Fly Speed",
     Range = {1, 50},
     Increment = 1,
     Suffix = "speed",
-    CurrentValue = flySpeed,
+    CurrentValue = 30,
     Flag = "FlySpeed",
     Callback = function(value)
         flySpeed = value
@@ -427,75 +196,93 @@ FlyTab:CreateSlider({
 
 -- Auto Aim & Hit Tab
 local AimTab = Window:CreateTab("Auto Aim & Hit", 4483345998)
-AimTab:CreateToggle({
+
+local AutoAimToggle = AimTab:CreateToggle({
     Name = "Auto Aim",
-    CurrentValue = autoAimEnabled,
+    CurrentValue = false,
     Flag = "AutoAim",
     Callback = function(value)
         autoAimEnabled = value
     end
 })
+
 AimTab:CreateSlider({
     Name = "Offset X",
     Range = {-20, 100},
     Increment = 1,
     Suffix = "offset",
-    CurrentValue = offsetX,
+    CurrentValue = 10,
     Flag = "OffsetX",
     Callback = function(value)
         offsetX = value
     end
 })
+
 AimTab:CreateSlider({
     Name = "Offset Y",
     Range = {-20, 100},
     Increment = 1,
     Suffix = "offset",
-    CurrentValue = offsetY,
+    CurrentValue = 10,
     Flag = "OffsetY",
     Callback = function(value)
         offsetY = value
     end
 })
-AimTab:CreateToggle({
+
+local AutoHitToggle = AimTab:CreateToggle({
     Name = "Auto Hit (Left Click)",
-    CurrentValue = autoHitEnabled,
+    CurrentValue = false,
     Flag = "AutoHit",
     Callback = function(value)
         autoHitEnabled = value
     end
 })
-AimTab:CreateToggle({
+
+local PerfectAimToggle = AimTab:CreateToggle({
     Name = "Perfect Aim (Auto Align Bat)",
-    CurrentValue = perfectAim,
+    CurrentValue = false,
     Flag = "PerfectAim",
     Callback = function(value)
         perfectAim = value
     end
 })
-AimTab:CreateToggle({
+
+local MagBallToggle = AimTab:CreateToggle({
     Name = "Mag Ball (Pull Ball to You)",
-    CurrentValue = magBallEnabled,
+    CurrentValue = false,
     Flag = "MagBall",
     Callback = function(value)
         magBallEnabled = value
-        if not value then
-            RemoveMagBall()
-        end
     end
 })
+
 AimTab:CreateToggle({
     Name = "Show Strike Zone",
-    CurrentValue = strikeZoneVisible,
+    CurrentValue = false,
     Flag = "ShowStrikeZone",
     Callback = function(value)
         strikeZoneVisible = value
-        UpdateStrikeZoneBox()
+        if strikeZoneVisible and not strikeZoneBox then
+            strikeZoneBox = Instance.new("BoxHandleAdornment")
+            strikeZoneBox.Size = Vector3.new(4, 4, 4)
+            strikeZoneBox.Transparency = 0.7
+            strikeZoneBox.Color3 = Color3.fromRGB(0, 255, 255)
+            strikeZoneBox.AlwaysOnTop = true
+            strikeZoneBox.ZIndex = 10
+            local adornee = GetStrikeZoneAdornee()
+            strikeZoneBox.Adornee = adornee
+            strikeZoneBox.Parent = adornee
+        elseif (not strikeZoneVisible) and strikeZoneBox then
+            strikeZoneBox:Destroy()
+            strikeZoneBox = nil
+        end
     end
 })
 
 -- Trash Talk Tab
 local TrashTab = Window:CreateTab("Trash Talk", 4483345998)
+
 TrashTab:CreateButton({
     Name = "Send Trash Talk",
     Callback = function()
@@ -503,8 +290,71 @@ TrashTab:CreateButton({
     end
 })
 
--- RunService Heartbeat loop for updates
-RunService.Heartbeat:Connect(function(delta)
+-- Utility function to create or update ball highlight
+local function updateBallHighlight(ball)
+    if not ballHighlight then
+        ballHighlight = Instance.new("SelectionBox")
+        ballHighlight.Adornee = ball
+        ballHighlight.LineThickness = 0.05
+        ballHighlight.Color3 = Color3.new(1, 0, 0)
+        ballHighlight.Parent = ball
+    end
+    ballHighlight.Adornee = ball
+end
+
+-- Utility function to create or update projection part (small sphere showing projected ball position)
+local function updateProjectionPart(pos)
+    if not projectionPart then
+        projectionPart = Instance.new("Part")
+        projectionPart.Shape = Enum.PartType.Ball
+        projectionPart.Material = Enum.Material.Neon
+        projectionPart.Color = Color3.fromRGB(0, 255, 255)
+        projectionPart.Size = Vector3.new(0.3, 0.3, 0.3)
+        projectionPart.Anchored = true
+        projectionPart.CanCollide = false
+        projectionPart.Transparency = 0.4
+        projectionPart.Parent = Workspace
+    end
+    projectionPart.Position = pos
+end
+
+-- Function to predict ball path and project in strike zone
+local function predictBallProjection(ball)
+    -- Simple prediction: project ball velocity for next 0.5 seconds in 0.1s increments
+    if not ball or not ball:IsA("BasePart") then return end
+    if not ball.Velocity then return end
+
+    local dt = 0.1
+    local predictionTime = 0.5
+    local gravity = Workspace.Gravity or 196.2
+
+    local position = ball.Position
+    local velocity = ball.Velocity
+
+    for t = dt, predictionTime, dt do
+        -- s = ut + 0.5at^2
+        local predictedPos = position + velocity * t + Vector3.new(0, -0.5 * gravity * t * t, 0)
+        updateProjectionPart(predictedPos)
+    end
+end
+
+-- Function to swing bat (simulate left mouse click)
+local function swingBat()
+    if syn and syn.mouse1click then
+        syn.mouse1click()
+    elseif mouse1click then
+        mouse1click()
+    elseif mouse1press and mouse1release then
+        mouse1press()
+        task.wait(0.1)
+        mouse1release()
+    else
+        -- no mouse click method, do nothing
+    end
+end
+
+-- Runservice updates
+RunService.Heartbeat:Connect(function(deltaTime)
     local char = LocalPlayer.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
@@ -512,17 +362,25 @@ RunService.Heartbeat:Connect(function(delta)
     if not hum or not hrp then return end
 
     -- WalkSpeed
-    if walkSpeedEnabled and hum.WalkSpeed ~= walkSpeed then
-        hum.WalkSpeed = walkSpeed
-    elseif not walkSpeedEnabled and hum.WalkSpeed ~= 16 then
-        hum.WalkSpeed = 16
+    if walkSpeedEnabled then
+        if hum.WalkSpeed ~= walkSpeed then
+            hum.WalkSpeed = walkSpeed
+        end
+    else
+        if hum.WalkSpeed ~= 16 then
+            hum.WalkSpeed = 16
+        end
     end
 
     -- JumpPower
-    if jumpPowerEnabled and hum.JumpPower ~= jumpPower then
-        hum.JumpPower = jumpPower
-    elseif not jumpPowerEnabled and hum.JumpPower ~= 50 then
-        hum.JumpPower = 50
+    if jumpPowerEnabled then
+        if hum.JumpPower ~= jumpPower then
+            hum.JumpPower = jumpPower
+        end
+    else
+        if hum.JumpPower ~= 50 then
+            hum.JumpPower = 50
+        end
     end
 
     -- HipHeight
@@ -532,56 +390,92 @@ RunService.Heartbeat:Connect(function(delta)
 
     -- Fly logic
     if flyEnabled then
-        FlyMovement(delta)
-    end
+        local camera = workspace.CurrentCamera
+        local moveVec = Vector3.new(0,0,0)
+        if flyUp then
+            moveVec = moveVec + Vector3.new(0, 1, 0)
+        end
+        if flyDown then
+            moveVec = moveVec + Vector3.new(0, -1, 0)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            moveVec = moveVec + (camera.CFrame.LookVector * Vector3.new(1,0,1).Unit)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+            moveVec = moveVec - (camera.CFrame.LookVector * Vector3.new(1,0,1).Unit)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+            moveVec = moveVec - (camera.CFrame.RightVector * Vector3.new(1,0,1).Unit)
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+            moveVec = moveVec + (camera.CFrame.RightVector * Vector3.new(1,0,1).Unit)
+        end
 
-    -- Update ball highlight and projection
-    UpdateBallHighlight()
-    if strikeZoneVisible then
-        UpdateProjectionParts()
-    end
-
-    -- Auto aim
-    AutoAim()
-
-    -- Mag ball
-    MagBall()
-end)
-
--- Auto Hit loop
-task.spawn(function()
-    while true do
-        AutoHit()
-        task.wait(0.1)
-    end
-end)
-
--- Input for fly up/down and swing already set above
-
--- Character Added handler
-LocalPlayer.CharacterAdded:Connect(function(char)
-    local hum = char:WaitForChild("Humanoid", 10)
-    if hum then
-        hum.PlatformStand = flyEnabled
-        hum.WalkSpeed = walkSpeedEnabled and walkSpeed or 16
-        hum.JumpPower = jumpPowerEnabled and jumpPower or 50
-        hum.HipHeight = hipHeight
-    end
-end)
-
--- Initial character setup
-do
-    local char = LocalPlayer.Character
-    if char then
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum.PlatformStand = flyEnabled
-            hum.WalkSpeed = walkSpeedEnabled and walkSpeed or 16
-            hum.JumpPower = jumpPowerEnabled and jumpPower or 50
-            hum.HipHeight = hipHeight
+        if moveVec.Magnitude > 0 then
+            moveVec = moveVec.Unit * flySpeed
+            hrp.CFrame = hrp.CFrame + moveVec * deltaTime
         end
     end
-end
 
--- Create initial projection parts
-CreateProjectionParts()
+    -- Ball tracking
+    local ball = Workspace:FindFirstChild("Ball")
+    if ball and ball:IsA("BasePart") then
+        -- Highlight ball
+        updateBallHighlight(ball)
+
+        -- Show projection of ball path
+        predictBallProjection(ball)
+
+        -- MagBall: pull ball to you
+        if magBallEnabled then
+            ball.Velocity = (hrp.Position - ball.Position).Unit * 150
+        end
+
+        -- Auto Aim: rotate player to face ball with offsets
+        if autoAimEnabled then
+            local dir = (ball.Position + Vector3.new(offsetX, offsetY, 0) - hrp.Position).Unit
+            hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
+        end
+
+        -- Perfect Aim (auto align bat) stub - add your bat alignment here if needed
+
+        -- Auto Hit: if ball is close and enabled, swing bat on left click
+        if autoHitEnabled then
+            if (ball.Position - hrp.Position).Magnitude < 30 then
+                swingBat()
+            end
+        end
+    else
+        -- No ball found: cleanup highlight and projection
+        if ballHighlight then
+            ballHighlight:Destroy()
+            ballHighlight = nil
+        end
+        if projectionPart then
+            projectionPart:Destroy()
+            projectionPart = nil
+        end
+    end
+end)
+
+-- Detect fly up/down keys
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Space then
+        flyUp = true
+    elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
+        flyDown = true
+    end
+end)
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.Space then
+        flyUp = false
+    elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
+        flyDown = false
+    end
+end)
+
+-- Handle mouse input for perfect aim or other features if needed
+-- (Add your mouse detection code here if you want)
+
+-- END OF SCRIPT
