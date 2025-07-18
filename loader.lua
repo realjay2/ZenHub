@@ -4,6 +4,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
 
 -- Settings & State
 local autoAimEnabled = false
@@ -11,7 +12,7 @@ local autoHitEnabled = false
 local walkSpeedLoop = false
 local jumpPowerLoop = false
 local walkSpeed = 16
-local jumpPower = 50
+local jumpPower = 65
 local offsetX, offsetY = 10, 10
 local perfectAim = false
 local pitchPredictionEnabled = false
@@ -24,6 +25,122 @@ local magBallEnabled = false
 
 -- Root folder to browse in File Explorer
 local rootFolder = workspace
+
+-- Iris Exploit UI Init (will initialize only when Iris tab activated)
+local IrisLoaded = false
+local Iris = nil
+local PropertyAPIDump = nil
+local ScriptContent = [[]]
+local SelectedInstance = nil
+local Properties = {}
+
+-- Iris State variables
+local InstanceViewer = nil
+local PropertyViewer = nil
+local ScriptViewer = nil
+
+local function GetPropertiesForInstance(Instance)
+    local Properties = {}
+    for i,v in next, PropertyAPIDump do
+        if v.Class == Instance.ClassName and v.type == "Property" then
+            pcall(function()
+                Properties[v.Name] = {
+                    Value = Instance[v.Name],
+                    Type = v.ValueType,
+                }
+            end)
+        end
+    end
+    return Properties
+end
+
+local function CrawlInstances(Inst)
+    for _, Instance in next, Inst:GetChildren() do
+        local InstTree = Iris.Tree({Instance.Name})
+
+        Iris.SameLine() do
+            if Instance:IsA("LocalScript") or Instance:IsA("ModuleScript") then
+                if Iris.SmallButton({"View Script"}).clicked then
+                    ScriptContent = decompile(Instance)
+                end
+            end
+            if Iris.SmallButton({"View Properties"}).clicked then
+                SelectedInstance = Instance
+                Properties = GetPropertiesForInstance(Instance)
+            end
+            Iris.End()
+        end
+
+        if InstTree.state.isUncollapsed.value then
+            CrawlInstances(Instance)
+        end
+        Iris.End()
+    end
+end
+
+local function InitIris()
+    if IrisLoaded then return end
+    IrisLoaded = true
+    Iris = loadstring(game:HttpGet("https://raw.githubusercontent.com/x0581/Iris-Exploit-Bundle/main/bundle.lua"))().Init()
+    PropertyAPIDump = HttpService:JSONDecode(game:HttpGet("https://anaminus.github.io/rbx/json/api/latest.json"))
+
+    -- Initialize Iris State
+    InstanceViewer = Iris.State(false)
+    PropertyViewer = Iris.State(false)
+    ScriptViewer = Iris.State(false)
+
+    Iris:Connect(function()
+        Iris.Window({"MikeExplorer Settings", [Iris.Args.Window.NoResize] = true}, {size = Iris.State(Vector2.new(400, 75)), position = Iris.State(Vector2.new(0, 0))}) do
+            Iris.SameLine() do
+                Iris.Checkbox({"Instance Viewer"}, {isChecked = InstanceViewer})
+                Iris.Checkbox({"Property Viewer"}, {isChecked = PropertyViewer})
+                Iris.Checkbox({"Script Viewer"}, {isChecked = ScriptViewer})
+                Iris.End()
+            end
+            Iris.End()
+        end
+
+        if InstanceViewer.value then
+            Iris.Window({"MikeExplorer Instance Viewer", [Iris.Args.Window.NoClose] = true}, {size = Iris.State(Vector2.new(400, 300)), position = Iris.State(Vector2.new(0, 75))}) do
+                CrawlInstances(game)
+                Iris.End()
+            end
+        end
+
+        if PropertyViewer.value then
+            Iris.Window({"MikeExplorer Property Viewer", [Iris.Args.Window.NoClose] = true}, {size = Iris.State(Vector2.new(400, 200)), position = Iris.State(Vector2.new(0, 375))}) do
+                Iris.Text({("Viewing Properties For: %s"):format(
+                    SelectedInstance and SelectedInstance:GetFullName() or "UNKNOWN INSTANCE"
+                )})
+                Iris.Table({3, [Iris.Args.Table.RowBg] = true}) do
+                    for PropertyName, PropDetails in next, Properties do
+                        Iris.Text({PropertyName})
+                        Iris.NextColumn()
+                        Iris.Text({PropDetails.Type})
+                        Iris.NextColumn()
+                        Iris.Text({tostring(PropDetails.Value)})
+                        Iris.NextColumn()
+                    end
+                    Iris.End()
+                end
+            end
+            Iris.End()
+        end
+
+        if ScriptViewer.value then
+            Iris.Window({"MikeExplorer Script Viewer", [Iris.Args.Window.NoClose] = true}, {size = Iris.State(Vector2.new(600, 575)), position = Iris.State(Vector2.new(400, 0))}) do
+                if Iris.Button({"Copy To Clipboard"}).clicked then
+                    setclipboard(ScriptContent)
+                end
+                local Lines = ScriptContent:split("\n")
+                for I, Line in next, Lines do
+                    Iris.Text({Line})
+                end
+                Iris.End()
+            end
+        end
+    end)
+end
 
 -- Key Window
 local KeyWindow = OrionLib:MakeWindow({
@@ -59,7 +176,7 @@ local function createMainUI()
     MoveTab:AddSlider({
         Name = "WalkSpeed",
         Min = 16,
-        Max = 29,           -- max 29 as requested
+        Max = 29,
         Default = 16,
         Increment = 1,
         Callback = function(value)
@@ -78,7 +195,7 @@ local function createMainUI()
     MoveTab:AddSlider({
         Name = "JumpPower",
         Min = 50,
-        Max = 50,           -- max 50 as requested
+        Max = 65,
         Default = 50,
         Increment = 1,
         Callback = function(value)
@@ -305,6 +422,30 @@ local function createMainUI()
 
     updateList()
 
+    -- Iris Explorer Tab (new!)
+    local IrisTab = mainWindow:MakeTab({
+        Name = "Iris Explorer",
+        Icon = "rbxassetid://4483345998",
+        PremiumOnly = false
+    })
+
+    local IrisToggle = IrisTab:AddToggle({
+        Name = "Enable Iris UI",
+        Default = false,
+        Callback = function(value)
+            if value then
+                InitIris()
+                -- Iris UI now visible as floating windows, no blocking Orion UI
+            else
+                if IrisLoaded and Iris then
+                    Iris:Destroy()
+                    Iris = nil
+                    IrisLoaded = false
+                end
+            end
+        end
+    })
+
     -- Other Tab for unload
     local OtherTab = mainWindow:MakeTab({
         Name = "Other",
@@ -343,26 +484,44 @@ local function createMainUI()
                 local bf = ball:FindFirstChild("MagnetForce")
                 if bf then bf:Destroy() end
             end
+            if IrisLoaded and Iris then
+                Iris:Destroy()
+                Iris = nil
+                IrisLoaded = false
+            end
         end
     })
 
-    -- Loops
-    task.spawn(function()
-        while true do
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChildOfClass("Humanoid") then
-                local hum = char:FindFirstChildOfClass("Humanoid")
+    -- Apply WalkSpeed and JumpPower continuously
+    RunService.Heartbeat:Connect(function()
+        local char = LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then
                 if walkSpeedLoop then
-                    hum.WalkSpeed = walkSpeed
+                    if hum.WalkSpeed ~= walkSpeed then
+                        hum.WalkSpeed = walkSpeed
+                    end
+                else
+                    if hum.WalkSpeed ~= 16 then
+                        hum.WalkSpeed = 16
+                    end
                 end
+
                 if jumpPowerLoop then
-                    hum.JumpPower = jumpPower
+                    if hum.JumpPower ~= jumpPower then
+                        hum.JumpPower = jumpPower
+                    end
+                else
+                    if hum.JumpPower ~= 50 then
+                        hum.JumpPower = 50
+                    end
                 end
             end
-            task.wait(0.2)
         end
     end)
 
+    -- Auto Aim
     RunService.RenderStepped:Connect(function()
         if autoAimEnabled then
             local ball = Workspace:FindFirstChild("Ball")
@@ -375,6 +534,7 @@ local function createMainUI()
         end
     end)
 
+    -- Auto Hit (Left Click)
     task.spawn(function()
         while true do
             if autoHitEnabled then
@@ -388,134 +548,3 @@ local function createMainUI()
             end
             task.wait(0.1)
         end
-    end)
-
-    RunService.RenderStepped:Connect(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-
-        -- Pitch Prediction highlight and Perfect Aim
-        if pitchPredictionEnabled then
-            local ball = Workspace:FindFirstChild("Ball")
-            if ball then
-                if not highlightBox then
-                    highlightBox = Instance.new("BoxHandleAdornment")
-                    highlightBox.Size = Vector3.new(4, 4, 4)
-                    highlightBox.Transparency = 0.5
-                    highlightBox.Color3 = Color3.fromRGB(255, 0, 0)
-                    highlightBox.AlwaysOnTop = true
-                    highlightBox.ZIndex = 10
-                    highlightBox.Adornee = ball
-                    highlightBox.Parent = ball
-                end
-                highlightBox.Adornee = ball
-                if perfectAim then
-                    local hrp = char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        local dir = (ball.Position - hrp.Position).Unit
-                        hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + dir)
-                    end
-                end
-            else
-                if highlightBox then
-                    highlightBox:Destroy()
-                    highlightBox = nil
-                end
-            end
-        else
-            if highlightBox then
-                highlightBox:Destroy()
-                highlightBox = nil
-            end
-        end
-    end)
-
-    -- Increase ball speed if YOU are pitching (adjust pitcher detection logic as needed)
-    task.spawn(function()
-        while true do
-            local ball = Workspace:FindFirstChild("Ball")
-            if ball then
-                local pitcher = Workspace:FindFirstChild("Pitcher") -- Example placeholder; adjust for your game
-                if pitcher and pitcher:IsA("Model") and pitcher.Name == LocalPlayer.Name then
-                    local bodyVelocity = ball:FindFirstChildWhichIsA("BodyVelocity")
-                    if not bodyVelocity then
-                        bodyVelocity = Instance.new("BodyVelocity")
-                        bodyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                        bodyVelocity.Parent = ball
-                    end
-                    local vel = ball.Velocity
-                    bodyVelocity.Velocity = vel * ballSpeedMultiplier
-                else
-                    local bodyVelocity = ball:FindFirstChildWhichIsA("BodyVelocity")
-                    if bodyVelocity then
-                        bodyVelocity:Destroy()
-                    end
-                end
-            end
-            task.wait(0.1)
-        end
-    end)
-
-    -- Mag Ball: Pull ball to you from any distance
-    task.spawn(function()
-        while true do
-            if magBallEnabled then
-                local ball = Workspace:FindFirstChild("Ball")
-                local char = LocalPlayer.Character
-                if ball and char and char:FindFirstChild("HumanoidRootPart") then
-                    local hrp = char.HumanoidRootPart
-                    local direction = (hrp.Position - ball.Position)
-                    local distance = direction.Magnitude
-                    local pullStrength = math.clamp(distance * 5, 50, 1000) -- Adjust force strength as needed
-
-                    local bodyForce = ball:FindFirstChild("MagnetForce")
-                    if not bodyForce then
-                        bodyForce = Instance.new("BodyForce")
-                        bodyForce.Name = "MagnetForce"
-                        bodyForce.Parent = ball
-                    end
-
-                    bodyForce.Force = direction.Unit * pullStrength * ball:GetMass()
-                else
-                    local ball = Workspace:FindFirstChild("Ball")
-                    if ball then
-                        local bf = ball:FindFirstChild("MagnetForce")
-                        if bf then bf:Destroy() end
-                    end
-                end
-            else
-                local ball = Workspace:FindFirstChild("Ball")
-                if ball then
-                    local bf = ball:FindFirstChild("MagnetForce")
-                    if bf then bf:Destroy() end
-                end
-            end
-            task.wait(0.1)
-        end
-    end)
-end
-
-KeyTab:AddTextbox({
-    Name = "Enter Key (Hint: 123)",
-    Default = "",
-    TextDisappear = true,
-    Callback = function(input)
-        if input == correctKey then
-            OrionLib:MakeNotification({
-                Name = "✅ Correct Key",
-                Content = "Loading UI...",
-                Time = 3
-            })
-            createMainUI()
-            KeyWindow:Destroy()
-        else
-            OrionLib:MakeNotification({
-                Name = "❌ Wrong Key",
-                Content = "Try again.",
-                Time = 3
-            })
-        end
-    end
-})
-
-OrionLib:Init()
