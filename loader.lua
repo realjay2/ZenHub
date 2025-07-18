@@ -29,11 +29,6 @@ local ScriptContent = [[]]
 local SelectedInstance = nil
 local Properties = {}
 
--- Iris State variables
-local InstanceViewer = nil
-local PropertyViewer = nil
-local ScriptViewer = nil
-
 -- Utility to get properties for Iris
 local function GetPropertiesForInstance(Instance)
     local Properties = {}
@@ -139,7 +134,7 @@ local function InitIris()
     end)
 end
 
--- Function to create main UI after key success
+-- Function to create main UI
 local mainWindow -- will store main UI window
 
 function createMainUI()
@@ -575,116 +570,4 @@ function createMainUI()
                     local rootPart = char:FindFirstChild("HumanoidRootPart")
                     if rootPart then
                         rootPart.Velocity = Vector3.new(0, 0, 0)
-                        local userInputService = game:GetService("UserInputService")
-                        local direction = Vector3.new()
-                        if userInputService:IsKeyDown(Enum.KeyCode.W) then
-                            direction = direction + workspace.CurrentCamera.CFrame.LookVector
-                        end
-                        if userInputService:IsKeyDown(Enum.KeyCode.S) then
-                            direction = direction - workspace.CurrentCamera.CFrame.LookVector
-                        end
-                        if userInputService:IsKeyDown(Enum.KeyCode.A) then
-                            direction = direction - workspace.CurrentCamera.CFrame.RightVector
-                        end
-                        if userInputService:IsKeyDown(Enum.KeyCode.D) then
-                            direction = direction + workspace.CurrentCamera.CFrame.RightVector
-                        end
-                        if userInputService:IsKeyDown(Enum.KeyCode.Space) then
-                            direction = direction + Vector3.new(0, 1, 0)
-                        end
-                        if userInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-                            direction = direction - Vector3.new(0, 1, 0)
-                        end
-                        direction = direction.Unit
-                        rootPart.Velocity = direction * flySpeed
-                        hum.PlatformStand = true
-                    end
-                else
-                    if hum.PlatformStand then
-                        hum.PlatformStand = false
-                    end
-                end
-            end
-        end
-    end)
-
-    -- Auto Aim & Hit logic (simplified, placeholder)
-    RunService.Heartbeat:Connect(function()
-        if autoAimEnabled then
-            -- Implement aiming logic here
-        end
-        if autoHitEnabled then
-            -- Implement auto hit logic here
-        end
-        if magBallEnabled then
-            local ball = Workspace:FindFirstChild("Ball")
-            if ball then
-                local rootPart = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if rootPart then
-                    local bodyVelocity = ball:FindFirstChild("MagnetForce")
-                    if not bodyVelocity then
-                        bodyVelocity = Instance.new("BodyVelocity")
-                        bodyVelocity.Name = "MagnetForce"
-                        bodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
-                        bodyVelocity.Parent = ball
-                    end
-                    bodyVelocity.Velocity = (rootPart.Position - ball.Position).Unit * 100 * ballSpeedMultiplier
-                end
-            end
-        else
-            local ball = Workspace:FindFirstChild("Ball")
-            if ball then
-                local bodyVelocity = ball:FindFirstChild("MagnetForce")
-                if bodyVelocity then
-                    bodyVelocity:Destroy()
-                end
-            end
-        end
-    end)
-end
-
--- Create Key UI first
-local KeyWindow = OrionLib:MakeWindow({
-    Name = "Enter Key",
-    HidePremium = true,
-    SaveConfig = false
-})
-
-local KeyTab = KeyWindow:MakeTab({
-    Name = "Key",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
-KeyTab:AddTextbox({
-    Name = "Enter Your Key",
-    Default = "",
-    TextDisappear = true,
-    Callback = function(Key)
-        if Key == "123" then
-            OrionLib:MakeNotification({
-                Name = "Success!",
-                Content = "Correct Key entered!",
-                Image = "rbxassetid://4483345998",
-                Time = 5
-            })
-            -- Destroy the key window first, then open main UI after a tiny delay
-            KeyWindow:Destroy()
-            task.delay(0.1, function()
-                createMainUI()
-            end)
-        else
-            OrionLib:MakeNotification({
-                Name = "Error!",
-                Content = "Incorrect Key! Try again.",
-                Image = "rbxassetid://4483345998",
-                Time = 5
-            })
-        end
-    end
-})
-
--- Start the UI by showing the key window
--- (Already created above)
-
-print("Script loaded, waiting for key input...")
+                        local userInput
