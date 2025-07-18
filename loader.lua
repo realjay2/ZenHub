@@ -1,4 +1,5 @@
 -- Load Orion Library safely
+print("STARTING HCBB HUB")
 local OrionLib
 do
     local success, response = pcall(function()
@@ -608,5 +609,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+print("BYPASSED HCBB FUCKASS ANTI CHEAT")
+print("HAVE FUN")
 -- Initialize Orion UI
 OrionLib:Init()
