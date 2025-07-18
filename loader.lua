@@ -5,163 +5,177 @@ local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/Siri
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UIS = game:GetService("UserInputService")
+local UserInputService = game:GetService("UserInputService")
+local Debris = game:GetService("Debris")
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
-
--- Character
 local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
 local Humanoid = Character:WaitForChild("Humanoid")
 local HRP = Character:WaitForChild("HumanoidRootPart")
 
--- Chat Event
-local ChatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
-local SayMessageRequest = ChatEvents:WaitForChild("SayMessageRequest")
+-- Window Setup
+local Window = Rayfield:CreateWindow({
+	Name = "HCBB Utility",
+	LoadingTitle = "HCBB Script Loader",
+	LoadingSubtitle = "by Kai",
+	ConfigurationSaving = { Enabled = false },
+	Discord = { Enabled = false },
+	KeySystem = false
+})
 
--- Trash Talk Messages
+-- Global Vars
+local flightSpeed = 3
+local walkSpeed = 16
+local hipHeight = Humanoid.HipHeight
+local walkSpeedEnabled = false
+local flying = false
 local trashTalkMessages = {
-    "You can't hit nun",
-    "Knowledge of a 3rd grader",
-    "Your BA is probably -100",
-    "Can't blame ping on that one son",
-    "Get better",
-    "Womp womp",
-    "IQ of a packet loss",
-    "Rando Pooron"
+	"You can't hit nun", "IQ of a Packet Loss", "Knowledge of a 3rd grader",
+	"your ba is probably -100", "Cant blame ping on that one", "get better",
+	"womp womp", "Rando Pooron", "You're swinging like a tee-ball player"
 }
 
--- States
-local flying = false
-local walkspeedEnabled = false
-local flySpeed = 1
-local wsSpeed = 16
+-- WalkSpeed Controller
+RunService.RenderStepped:Connect(function()
+	if walkSpeedEnabled then
+		Humanoid.WalkSpeed = walkSpeed
+	else
+		Humanoid.WalkSpeed = 16
+	end
+end)
 
--- UI Setup
-Rayfield:CreateWindow({Name = "Phoenix Ultra ⚾", LoadingTitle = "Initializing", ConfigurationSaving = {Enabled = false}})
+-- Fly System
+local function fly()
+	if flying then return end
+	flying = true
 
-local MainTab = Rayfield:CreateTab({Name = "Main", Icon = "🏃"})
-local GameTab = Rayfield:CreateTab({Name = "Game Tools", Icon = "🧠"})
-local MiscTab = Rayfield:CreateTab({Name = "Misc", Icon = "🎯"})
+	local bv = Instance.new("BodyVelocity")
+	bv.Name = "FlightVelocity"
+	bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+	bv.Velocity = Vector3.zero
+	bv.Parent = HRP
 
--- Fly
-MainTab:CreateToggle({
-    Name = "Fly (CFrame)",
-    CurrentValue = false,
-    Callback = function(state)
-        flying = state
-    end,
-})
+	RunService:BindToRenderStep("FlyControl", Enum.RenderPriority.Input.Value, function()
+		local cam = workspace.CurrentCamera
+		local dir = Vector3.zero
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= cam.CFrame.LookVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += cam.CFrame.RightVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir += cam.CFrame.UpVector end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then dir -= cam.CFrame.UpVector end
+		bv.Velocity = dir.Unit * flightSpeed
+	end)
+end
 
--- WalkSpeed
-MainTab:CreateToggle({
-    Name = "WalkSpeed (CFrame)",
-    CurrentValue = false,
-    Callback = function(state)
-        walkspeedEnabled = state
-    end,
-})
-
-MainTab:CreateSlider({
-    Name = "Speed",
-    Range = {1, 30},
-    Increment = 1,
-    CurrentValue = 16,
-    Callback = function(value)
-        wsSpeed = value
-        flySpeed = value
-    end,
-})
-
--- HipHeight
-MiscTab:CreateSlider({
-    Name = "Hip Height",
-    Range = {0, 50},
-    Increment = 1,
-    CurrentValue = 2,
-    Callback = function(value)
-        Humanoid.HipHeight = value
-    end,
-})
+local function stopFly()
+	flying = false
+	local bv = HRP:FindFirstChild("FlightVelocity")
+	if bv then bv:Destroy() end
+	RunService:UnbindFromRenderStep("FlyControl")
+end
 
 -- Trash Talk
-MiscTab:CreateButton({
-    Name = "Trash Talk",
-    Callback = function()
-        local msg = trashTalkMessages[math.random(1, #trashTalkMessages)]
-        SayMessageRequest:FireServer(msg, "All")
-    end,
-})
+local function sayTrash()
+	local chatEvent = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents"):WaitForChild("SayMessageRequest")
+	local msg = trashTalkMessages[math.random(1, #trashTalkMessages)]
+	chatEvent:FireServer(msg, "All")
+end
 
--- Ball Highlighter & Strike Zone Projection
-GameTab:CreateButton({
-    Name = "Highlight Ball & Project",
-    Callback = function()
-        local ball = workspace:FindFirstChild("Ball")
-        local gui = ReplicatedStorage:FindFirstChild("HRDGui")
-        if not (ball and gui) then return end
+-- Ball Highlight + Prediction
+local function highlightAndPredict()
+	local ball = workspace:FindFirstChild("Ball")
+	if not ball then return end
 
-        -- Highlight
-        if not ball:FindFirstChild("SelectionBox") then
-            local sel = Instance.new("SelectionBox", ball)
-            sel.Adornee = ball
-            sel.Color3 = Color3.new(1, 1, 0)
-            sel.LineThickness = 0.05
-        end
+	if not ball:FindFirstChild("Highlight") then
+		local hl = Instance.new("Highlight")
+		hl.Name = "Highlight"
+		hl.FillColor = Color3.fromRGB(255, 255, 0)
+		hl.OutlineColor = Color3.fromRGB(255, 0, 0)
+		hl.FillTransparency = 0.5
+		hl.OutlineTransparency = 0
+		hl.Parent = ball
+	end
 
-        -- Predict path
-        local projection = Instance.new("Part", workspace)
-        projection.Anchored = true
-        projection.CanCollide = false
-        projection.Transparency = 0.5
-        projection.Color = Color3.new(0, 1, 0)
-        projection.Material = Enum.Material.Neon
-        projection.Shape = Enum.PartType.Ball
-        projection.Size = Vector3.new(0.5, 0.5, 0.5)
+	local proj = Instance.new("Part")
+	proj.Anchored = true
+	proj.CanCollide = false
+	proj.Shape = Enum.PartType.Ball
+	proj.Size = Vector3.new(0.5, 0.5, 0.5)
+	proj.Material = Enum.Material.Neon
+	proj.Color = Color3.fromRGB(0, 255, 0)
+	proj.Position = ball.Position + (ball.Velocity.Unit * 5)
+	proj.Parent = workspace
+	Debris:AddItem(proj, 1)
+end
 
-        -- Simple prediction
-        local predictedPos = ball.Position + ball.Velocity * 0.5
-        projection.Position = predictedPos
-
-        -- Check if it's in strike zone
-        local swingZone = gui:FindFirstChild("SwingZone")
-        if swingZone then
-            local zoneCF = swingZone.CFrame
-            local zoneSize = swingZone.Size
-            local inZone = (predictedPos.X >= (zoneCF.X - zoneSize.X/2) and predictedPos.X <= (zoneCF.X + zoneSize.X/2)) and
-                           (predictedPos.Y >= (zoneCF.Y - zoneSize.Y/2) and predictedPos.Y <= (zoneCF.Y + zoneSize.Y/2)) and
-                           (predictedPos.Z >= (zoneCF.Z - zoneSize.Z/2) and predictedPos.Z <= (zoneCF.Z + zoneSize.Z/2))
-
-            if inZone then
-                projection.Color = Color3.new(0, 1, 0) -- green
-            else
-                projection.Color = Color3.new(1, 0, 0) -- red
-            end
-        end
-    end,
-})
-
--- Input: Left Click to Swing Bat
-Mouse.Button1Down:Connect(function()
-    local tool = Character:FindFirstChildOfClass("Tool")
-    if tool and tool:FindFirstChild("Swing") then
-        pcall(function()
-            tool.Swing:FireServer()
-        end)
-    end
+-- Left Click Swing
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 and not gameProcessed then
+		local bat = Character:FindFirstChild("Bat")
+		if bat and bat:FindFirstChild("Swing") then
+			bat.Swing:FireServer()
+		end
+	end
 end)
 
--- Fly / WS Logic
-RunService.RenderStepped:Connect(function()
-    if flying or walkspeedEnabled then
-        local direction = Vector3.zero
-        if UIS:IsKeyDown(Enum.KeyCode.W) then direction += workspace.CurrentCamera.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= workspace.CurrentCamera.CFrame.LookVector end
-        if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= workspace.CurrentCamera.CFrame.RightVector end
-        if UIS:IsKeyDown(Enum.KeyCode.D) then direction += workspace.CurrentCamera.CFrame.RightVector end
+-- StrikeZone
+local SwingZone = ReplicatedStorage:WaitForChild("HRDGui"):FindFirstChild("SwingZone")
 
-        direction = direction.Unit
-        if direction.Magnitude > 0 then
-            HRP.CFrame = HRP.CFrame + (direction * (flying and flySpeed or wsSpeed) * RunService.RenderStepped:Wait())
-        end
-    end
-end)
+-- UI Tabs
+local movementTab = Window:CreateTab("Movement", 4483362458)
+movementTab:CreateToggle({
+	Name = "Enable Fly",
+	CurrentValue = false,
+	Callback = function(state)
+		if state then fly() else stopFly() end
+	end
+})
+
+movementTab:CreateSlider({
+	Name = "Flight Speed",
+	Range = {1, 25},
+	Increment = 1,
+	CurrentValue = flightSpeed,
+	Callback = function(val) flightSpeed = val end
+})
+
+movementTab:CreateToggle({
+	Name = "Custom Walkspeed",
+	CurrentValue = false,
+	Callback = function(val) walkSpeedEnabled = val end
+})
+
+movementTab:CreateSlider({
+	Name = "Walkspeed",
+	Range = {16, 100},
+	Increment = 1,
+	CurrentValue = walkSpeed,
+	Callback = function(val) walkSpeed = val end
+})
+
+movementTab:CreateSlider({
+	Name = "HipHeight",
+	Range = {0, 5},
+	Increment = 0.1,
+	CurrentValue = hipHeight,
+	Callback = function(val)
+		hipHeight = val
+		Humanoid.HipHeight = hipHeight
+	end
+})
+
+local miscTab = Window:CreateTab("Utilities", 4483361031)
+miscTab:CreateButton({
+	Name = "🔥 Trash Talk",
+	Callback = sayTrash
+})
+
+miscTab:CreateButton({
+	Name = "📍 Highlight Ball + Predict",
+	Callback = highlightAndPredict
+})
+
+miscTab:CreateParagraph({
+	Title = "SwingZone Module",
+	Content = SwingZone and "SwingZone module found ✅" or "Not found ❌"
+})
