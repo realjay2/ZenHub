@@ -4,10 +4,10 @@ local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/Siri
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local LocalPlayer = Players.LocalPlayer
-local HttpService = game:GetService("HttpService")
-local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
 
 -- Chat stuff
 local ChatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
@@ -22,7 +22,6 @@ local jumpPowerEnabled = false
 
 local flyEnabled = false
 local flySpeed = 30
-local flyVelocity = Vector3.new(0,0,0)
 local flyUp = false
 local flyDown = false
 
@@ -31,6 +30,9 @@ local autoHitEnabled = false
 local perfectAim = false
 local magBallEnabled = false
 local offsetX, offsetY = 10, 10
+
+local strikeZoneVisible = false
+local strikeZoneBox = nil
 
 -- Trash talk messages
 local trashTalkMessages = {
@@ -49,6 +51,25 @@ local function sendTrashTalk()
     SayMessageRequest:FireServer(message, "All")
 end
 
+-- Function to get strike zone adornee
+local function GetStrikeZoneAdornee()
+    -- Try ReplicatedStorage.HRDGui.SwingZone Module
+    local hrdGui = ReplicatedStorage:FindFirstChild("HRDGui")
+    if hrdGui then
+        local swingZone = hrdGui:FindFirstChild("SwingZone")
+        if swingZone and (swingZone:IsA("BasePart") or swingZone:IsA("Model")) then
+            return swingZone
+        end
+    end
+    -- Fallback to Workspace HomePlate or StrikeZone
+    local plate = Workspace:FindFirstChild("HomePlate") or Workspace:FindFirstChild("StrikeZone")
+    if plate then
+        return plate
+    end
+    -- Last fallback to Terrain (will be invisible)
+    return Workspace.Terrain
+end
+
 -- UI setup
 local Window = Rayfield:CreateWindow({
     Name = "⚾ HCBB Utility",
@@ -61,7 +82,7 @@ local Window = Rayfield:CreateWindow({
     },
     Discord = {
         Enabled = false,
-        Invite = "", 
+        Invite = "",
         RememberJoins = true
     }
 })
@@ -131,8 +152,8 @@ local HipHeightSlider = MovementTab:CreateSlider({
     CurrentValue = 2,
     Flag = "HipHeight",
     Callback = function(value)
-        hipHeight = value
         local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        hipHeight = value
         if hum then
             hum.HipHeight = hipHeight
         end
@@ -148,16 +169,9 @@ local FlyToggle = FlyTab:CreateToggle({
     Flag = "FlyToggle",
     Callback = function(value)
         flyEnabled = value
-        if not value then
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum.PlatformStand = false
-            end
-        else
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum.PlatformStand = true
-            end
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.PlatformStand = value
         end
     end
 })
@@ -247,6 +261,29 @@ TrashTab:CreateButton({
     end
 })
 
+-- Strike Zone Toggle (to show box adornment)
+AimTab:CreateToggle({
+    Name = "Show Strike Zone",
+    CurrentValue = false,
+    Flag = "ShowStrikeZone",
+    Callback = function(value)
+        strikeZoneVisible = value
+        if strikeZoneVisible and not strikeZoneBox then
+            strikeZoneBox = Instance.new("BoxHandleAdornment")
+            strikeZoneBox.Size = Vector3.new(4, 4, 4)
+            strikeZoneBox.Transparency = 0.7
+            strikeZoneBox.Color3 = Color3.fromRGB(0, 255, 255)
+            strikeZoneBox.AlwaysOnTop = true
+            strikeZoneBox.ZIndex = 10
+            strikeZoneBox.Adornee = GetStrikeZoneAdornee()
+            strikeZoneBox.Parent = strikeZoneBox.Adornee
+        elseif (not strikeZoneVisible) and strikeZoneBox then
+            strikeZoneBox:Destroy()
+            strikeZoneBox = nil
+        end
+    end
+})
+
 -- Runservice updates
 RunService.Heartbeat:Connect(function()
     local char = LocalPlayer.Character
@@ -284,7 +321,6 @@ RunService.Heartbeat:Connect(function()
 
     -- Fly logic
     if flyEnabled then
-        hum.PlatformStand = true
         local camera = workspace.CurrentCamera
         local moveVec = Vector3.new(0,0,0)
         if flyUp then
@@ -293,7 +329,6 @@ RunService.Heartbeat:Connect(function()
         if flyDown then
             moveVec = moveVec + Vector3.new(0, -1, 0)
         end
-        -- Move forward/back/left/right based on keys
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then
             moveVec = moveVec + (camera.CFrame.LookVector * Vector3.new(1,0,1).Unit)
         end
@@ -311,8 +346,6 @@ RunService.Heartbeat:Connect(function()
             moveVec = moveVec.Unit * flySpeed
             hrp.CFrame = hrp.CFrame + moveVec * RunService.Heartbeat:Wait()
         end
-    else
-        hum.PlatformStand = false
     end
 end)
 
