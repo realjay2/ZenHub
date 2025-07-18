@@ -1,4 +1,4 @@
--- Load Orion UI Library safely
+-- Load Orion UI Library safely from your provided URL
 local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/jensonhirst/Orion/main/source')))()
 
 local Players = game:GetService("Players")
@@ -9,14 +9,14 @@ local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Chat stuff
+-- Chat system for sending messages
 local ChatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
 local SayMessageRequest = ChatEvents:WaitForChild("SayMessageRequest")
 
--- State variables
+-- Variables for movement and features
 local walkSpeed = 16
 local jumpPower = 50
-local hipHeight = 0
+local hipHeight = 2
 local walkSpeedEnabled = false
 local jumpPowerEnabled = false
 
@@ -37,7 +37,7 @@ local strikeZoneBox = nil
 local ballHighlight = nil
 local ballProjectionParts = {}
 
--- Trash talk messages
+-- Trash talk phrases
 local trashTalkMessages = {
     "You can't hit nun",
     "Knowledge of a 3rd grader",
@@ -55,13 +55,11 @@ local trashTalkMessages = {
     "Easy strike for me!",
 }
 
--- Sends a random trash talk message in Roblox chat
 local function sendTrashTalk()
     local message = trashTalkMessages[math.random(1, #trashTalkMessages)]
     SayMessageRequest:FireServer(message, "All")
 end
 
--- Get strike zone adornee from ReplicatedStorage or Workspace fallback
 local function GetStrikeZoneAdornee()
     local hrdGui = ReplicatedStorage:FindFirstChild("HRDGui")
     if hrdGui then
@@ -77,7 +75,6 @@ local function GetStrikeZoneAdornee()
     return Workspace.Terrain
 end
 
--- Create or update strike zone box adornment
 local function UpdateStrikeZoneBox()
     if strikeZoneVisible then
         if not strikeZoneBox then
@@ -90,7 +87,6 @@ local function UpdateStrikeZoneBox()
             strikeZoneBox.Adornee = GetStrikeZoneAdornee()
             strikeZoneBox.Parent = strikeZoneBox.Adornee
         else
-            -- Update adornee in case it changed
             local adornee = GetStrikeZoneAdornee()
             if strikeZoneBox.Adornee ~= adornee then
                 strikeZoneBox.Adornee = adornee
@@ -103,7 +99,6 @@ local function UpdateStrikeZoneBox()
     end
 end
 
--- Highlights the ball with a selection box
 local function UpdateBallHighlight()
     local ball = Workspace:FindFirstChild("Ball")
     if not ball then
@@ -123,7 +118,6 @@ local function UpdateBallHighlight()
     end
 end
 
--- Clears ball projection parts
 local function ClearBallProjection()
     for _, part in ipairs(ballProjectionParts) do
         if part and part.Parent then
@@ -133,28 +127,24 @@ local function ClearBallProjection()
     ballProjectionParts = {}
 end
 
--- Projects where the ball will go inside strike zone
 local function UpdateBallProjection()
     ClearBallProjection()
     local ball = Workspace:FindFirstChild("Ball")
     if not ball then return end
 
-    -- Simple linear projection using ball velocity (if velocity not found, do nothing)
     local velocity = ball:FindFirstChild("BodyVelocity")
     if not velocity then return end
 
     local currentPos = ball.Position
     local vel = velocity.Velocity
-    local dt = 0.1 -- time step
+    local dt = 0.1
     local points = {}
 
-    -- Calculate 10 projection points ahead (1 second ahead)
     for i = 1, 10 do
         local projectedPos = currentPos + vel * dt * i
         table.insert(points, projectedPos)
     end
 
-    -- For each point, create a small transparent part to visualize the path
     for _, pos in ipairs(points) do
         local projPart = Instance.new("Part")
         projPart.Anchored = true
@@ -166,7 +156,6 @@ local function UpdateBallProjection()
         projPart.Position = pos
         projPart.Parent = Workspace
         table.insert(ballProjectionParts, projPart)
-        -- Auto destroy after 1.2 seconds so no clutter
         delay(1.2, function()
             if projPart and projPart.Parent then
                 projPart:Destroy()
@@ -175,7 +164,6 @@ local function UpdateBallProjection()
     end
 end
 
--- Swing the bat by simulating left mouse click
 local function SwingBat()
     if syn and syn.mouse1click then
         syn.mouse1click()
@@ -188,7 +176,7 @@ local function SwingBat()
     end
 end
 
--- Setup UI window
+-- Build the UI window
 local Window = OrionLib:MakeWindow({
     Name = "⚾ HCBB Utility",
     HidePremium = false,
@@ -386,10 +374,9 @@ TrashTab:AddButton({
     end
 })
 
--- Fly movement variables
+-- Fly input handlers
 local moveVec = Vector3.new(0,0,0)
 
--- Input handling for fly up/down keys
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.KeyCode == Enum.KeyCode.Space then
@@ -407,7 +394,7 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     end
 end)
 
--- Main update loop
+-- Main loop
 RunService.Heartbeat:Connect(function(dt)
     local char = LocalPlayer.Character
     if not char then return end
@@ -482,10 +469,7 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Perfect Aim placeholder (can align bat or something)
-    -- You can add custom logic here for bat alignment
-
-    -- MagBall logic: Pull ball towards player if enabled
+    -- MagBall logic
     if magBallEnabled then
         local ball = Workspace:FindFirstChild("Ball")
         if ball then
@@ -499,7 +483,6 @@ RunService.Heartbeat:Connect(function(dt)
             end
             bodyVel.Velocity = direction * 100
         else
-            -- Remove BodyVelocity if no ball found
             if ball and ball:FindFirstChildOfClass("BodyVelocity") then
                 ball:FindFirstChildOfClass("BodyVelocity"):Destroy()
             end
@@ -516,7 +499,7 @@ RunService.Heartbeat:Connect(function(dt)
     UpdateBallProjection()
 end)
 
--- Auto Hit loop: left click swing if ball near
+-- Auto Hit loop
 task.spawn(function()
     while true do
         if autoHitEnabled then
@@ -530,15 +513,15 @@ task.spawn(function()
     end
 end)
 
--- Left click mouse input for manual swing
+-- Manual swing on left mouse click (if autoHit disabled)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if not autoHitEnabled then -- Only manual swing if autoHit disabled
+        if not autoHitEnabled then
             SwingBat()
         end
     end
 end)
 
--- Init Orion UI
+-- Initialize UI
 OrionLib:Init()
