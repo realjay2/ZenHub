@@ -1,4 +1,5 @@
 -- Load Orion UI Library safely from your provided URL
+print("Attempting To Start Jay Hub")
 local OrionLib = loadstring(game:HttpGet('https://raw.githubusercontent.com/jensonhirst/Orion/main/source.lua'))()
 
 
