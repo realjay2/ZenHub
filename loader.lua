@@ -565,9 +565,73 @@ function createMainUI()
                     end
                 end
 
-                -- Fly logic
-                if flyEnabled then
-                    local rootPart = char:FindFirstChild("HumanoidRootPart")
-                    if rootPart then
-                        rootPart.Velocity = Vector3.new(0, 0, 0)
-                        local userInput
+-- Fly logic continued
+if flyEnabled then
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        -- Stop gravity effects on humanoid
+        hum.PlatformStand = true
+
+        local moveDirection = Vector3.new()
+
+        -- Use UserInputService to get WASD and space/ctrl movement
+        local UserInputService = game:GetService("UserInputService")
+
+        -- We'll cache keys pressed
+        local keysDown = {}
+
+        UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                keysDown[input.KeyCode] = true
+            end
+        end)
+
+        UserInputService.InputEnded:Connect(function(input, gameProcessed)
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                keysDown[input.KeyCode] = false
+            end
+        end)
+
+        -- Move fly logic every Heartbeat
+        RunService.Heartbeat:Connect(function()
+            if flyEnabled and rootPart then
+                local camCFrame = workspace.CurrentCamera.CFrame
+                local forward = camCFrame.LookVector
+                local right = camCFrame.RightVector
+
+                moveDirection = Vector3.new()
+
+                if keysDown[Enum.KeyCode.W] then
+                    moveDirection = moveDirection + forward
+                end
+                if keysDown[Enum.KeyCode.S] then
+                    moveDirection = moveDirection - forward
+                end
+                if keysDown[Enum.KeyCode.A] then
+                    moveDirection = moveDirection - right
+                end
+                if keysDown[Enum.KeyCode.D] then
+                    moveDirection = moveDirection + right
+                end
+                if keysDown[Enum.KeyCode.Space] then
+                    moveDirection = moveDirection + Vector3.new(0, 1, 0)
+                end
+                if keysDown[Enum.KeyCode.LeftControl] or keysDown[Enum.KeyCode.LeftShift] then
+                    moveDirection = moveDirection - Vector3.new(0, 1, 0)
+                end
+
+                if moveDirection.Magnitude > 0 then
+                    moveDirection = moveDirection.Unit * flySpeed
+                    rootPart.CFrame = rootPart.CFrame + moveDirection * RunService.Heartbeat:Wait()
+                end
+            else
+                if hum then
+                    hum.PlatformStand = false
+                end
+            end
+        end)
+    end
+else
+    hum.PlatformStand = false
+end
