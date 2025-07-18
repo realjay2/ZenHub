@@ -21,13 +21,6 @@ local strikeZoneBox = nil
 local magBallEnabled = false
 local ballSpeedMultiplier = 2 -- speed multiplier for ball when pitching
 
--- Noclip and Fly state
-local noclipEnabled = false
-local flyEnabled = false
-local flySpeed = 30
-local flyVelocity = Vector3.new(0,0,0)
-local userInputService = game:GetService("UserInputService")
-
 -- Iris Exploit UI Init
 local IrisLoaded = false
 local Iris = nil
@@ -146,50 +139,11 @@ local function InitIris()
     end)
 end
 
--- Key System Window
-local KeyWindow = OrionLib:MakeWindow({
-    Name = "HCBB Key System",
-    HidePremium = false,
-    SaveConfig = false,
-    ConfigFolder = "HCBBKey"
-})
-
-local KeyTab = KeyWindow:MakeTab({
-    Name = "Key Entry",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
+-- Function to create main UI after key success
 local mainWindow -- will store main UI window
 
-KeyTab:AddTextbox({
-    Name = "Enter Key",
-    Flag = "KeyBox",
-    Placeholder = "Enter Key Here",
-    TextDisappear = true,
-    Callback = function(Key)
-        if Key == "123" then
-            OrionLib:MakeNotification({
-                Name = "Success!",
-                Content = "Correct Key entered!",
-                Image = "rbxassetid://4483345998",
-                Time = 5
-            })
-            KeyWindow:Destroy()
-            createMainUI()
-        else
-            OrionLib:MakeNotification({
-                Name = "Error!",
-                Content = "Incorrect Key! Try again.",
-                Image = "rbxassetid://4483345998",
-                Time = 5
-            })
-        end
-    end
-})
-
--- Function to create main UI after key success
 function createMainUI()
+    print("createMainUI called")
     mainWindow = OrionLib:MakeWindow({
         Name = "⚾ HCBB Utility",
         HidePremium = false,
@@ -207,7 +161,7 @@ function createMainUI()
     MoveTab:AddSlider({
         Name = "WalkSpeed",
         Min = 16,
-        Max = 29,
+        Max = 30,
         Default = 16,
         Increment = 1,
         Callback = function(value)
@@ -226,8 +180,8 @@ function createMainUI()
     MoveTab:AddSlider({
         Name = "JumpPower",
         Min = 50,
-        Max = 65,
-        Default = 50,
+        Max = 100,
+        Default = 65,
         Increment = 1,
         Callback = function(value)
             jumpPower = value
@@ -242,40 +196,33 @@ function createMainUI()
         end
     })
 
-    -- Fly toggle added here:
+    -- Fly Tab (added fly toggle and speed)
     MoveTab:AddToggle({
         Name = "Fly",
         Default = false,
+        Flag = "FlyToggle",
         Callback = function(value)
             flyEnabled = value
-            if flyEnabled then
-                -- Freeze Humanoid state to avoid physics conflicts
+            if not value then
+                -- Disable fly, reset humanoid state
                 local char = LocalPlayer.Character
-                if char then
+                if char and char:FindFirstChildOfClass("Humanoid") then
                     local hum = char:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum.PlatformStand = true
-                    end
-                end
-            else
-                -- Restore Humanoid state
-                local char = LocalPlayer.Character
-                if char then
-                    local hum = char:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum.PlatformStand = false
-                    end
+                    hum.PlatformStand = false
                 end
             end
         end
     })
 
-    -- Noclip toggle added here:
-    MoveTab:AddToggle({
-        Name = "Noclip",
-        Default = false,
+    local flySpeed = 30
+    MoveTab:AddSlider({
+        Name = "Fly Speed",
+        Min = 1,
+        Max = 30,
+        Default = flySpeed,
+        Increment = 1,
         Callback = function(value)
-            noclipEnabled = value
+            flySpeed = value
         end
     })
 
@@ -532,8 +479,6 @@ function createMainUI()
             pitchPredictionEnabled = false
             perfectAim = false
             magBallEnabled = false
-            noclipEnabled = false
-            flyEnabled = false
             local char = LocalPlayer.Character
             if char and char:FindFirstChildOfClass("Humanoid") then
                 local hum = char:FindFirstChildOfClass("Humanoid")
@@ -555,6 +500,46 @@ function createMainUI()
                 Iris:Destroy()
                 Iris = nil
                 IrisLoaded = false
+            end
+        end
+    })
+
+    -- Fly and noclip implementation (RunService)
+    local flyEnabled = false
+    local noclipEnabled = false
+    local noclipConnections = {}
+
+    -- Noclip toggle in Other tab
+    OtherTab:AddToggle({
+        Name = "Noclip",
+        Default = false,
+        Callback = function(value)
+            noclipEnabled = value
+            if not noclipEnabled then
+                for _, conn in pairs(noclipConnections) do
+                    conn:Disconnect()
+                end
+                noclipConnections = {}
+            else
+                local char = LocalPlayer.Character
+                if char then
+                    for _, part in pairs(char:GetChildren()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+                -- Maintain noclip on touched parts (optional)
+                noclipConnections[#noclipConnections+1] = RunService.Stepped:Connect(function()
+                    local char = LocalPlayer.Character
+                    if char then
+                        for _, part in pairs(char:GetChildren()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                            end
+                        end
+                    end
+                end)
             end
         end
     })
@@ -584,140 +569,122 @@ function createMainUI()
                         hum.JumpPower = 50
                     end
                 end
-            end
-        end
 
-        -- Noclip logic: disable collisions on character parts
-        if noclipEnabled and char then
-            for _, part in pairs(char:GetChildren()) do
-                if part:IsA("BasePart") and part.CanCollide then
-                    part.CanCollide = false
-                end
-            end
-        elseif char then
-            for _, part in pairs(char:GetChildren()) do
-                if part:IsA("BasePart") and not part.CanCollide then
-                    part.CanCollide = true
-                end
-            end
-        end
-    end)
-
-    -- Auto Aim logic
-    RunService.RenderStepped:Connect(function()
-        if autoAimEnabled then
-            local ball = Workspace:FindFirstChild("Ball")
-            local char = LocalPlayer.Character
-            if ball and char and char:FindFirstChild("HumanoidRootPart") then
-                local hrp = char.HumanoidRootPart
-                local dir = (ball.Position + Vector3.new(offsetX, offsetY, 0) - hrp.Position).Unit
-                hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
-            end
-        end
-
-        -- Perfect Aim: (This is a stub, you can replace with your bat alignment code)
-        if perfectAim then
-            -- Example: align bat with ball direction here
-        end
-
-        -- Pitch Prediction (This is a placeholder, adjust as per game specifics)
-        if pitchPredictionEnabled then
-            -- Add prediction logic here if you want
-        end
-
-        -- Mag Ball pull
-        if magBallEnabled then
-            local ball = Workspace:FindFirstChild("Ball")
-            local char = LocalPlayer.Character
-            if ball and char and char:FindFirstChild("HumanoidRootPart") then
-                local hrp = char.HumanoidRootPart
-                -- Apply a BodyPosition to pull the ball towards player
-                local bodyPos = ball:FindFirstChild("MagnetForce")
-                if not bodyPos then
-                    bodyPos = Instance.new("BodyPosition")
-                    bodyPos.Name = "MagnetForce"
-                    bodyPos.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                    bodyPos.P = 1e4
-                    bodyPos.Parent = ball
-                end
-                bodyPos.Position = hrp.Position + Vector3.new(0, 3, 0)
-            else
-                local ball = Workspace:FindFirstChild("Ball")
-                if ball then
-                    local bf = ball:FindFirstChild("MagnetForce")
-                    if bf then bf:Destroy() end
-                end
-            end
-        else
-            -- Remove magnet force when disabled
-            local ball = Workspace:FindFirstChild("Ball")
-            if ball then
-                local bf = ball:FindFirstChild("MagnetForce")
-                if bf then bf:Destroy() end
-            end
-        end
-
-        -- Fly movement
-        if flyEnabled then
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local hrp = char.HumanoidRootPart
-                local moveDir = Vector3.new(0,0,0)
-
-                if userInputService:IsKeyDown(Enum.KeyCode.W) then
-                    moveDir = moveDir + (hrp.CFrame.LookVector)
-                end
-                if userInputService:IsKeyDown(Enum.KeyCode.S) then
-                    moveDir = moveDir - (hrp.CFrame.LookVector)
-                end
-                if userInputService:IsKeyDown(Enum.KeyCode.A) then
-                    moveDir = moveDir - (hrp.CFrame.RightVector)
-                end
-                if userInputService:IsKeyDown(Enum.KeyCode.D) then
-                    moveDir = moveDir + (hrp.CFrame.RightVector)
-                end
-                if userInputService:IsKeyDown(Enum.KeyCode.Space) then
-                    moveDir = moveDir + Vector3.new(0,1,0)
-                end
-                if userInputService:IsKeyDown(Enum.KeyCode.LeftControl) or userInputService:IsKeyDown(Enum.KeyCode.C) then
-                    moveDir = moveDir - Vector3.new(0,1,0)
-                end
-
-                if moveDir.Magnitude > 0 then
-                    moveDir = moveDir.Unit * flySpeed
-                    hrp.CFrame = hrp.CFrame + moveDir * RunService.RenderStepped:Wait()
-                end
-            end
-        end
-    end)
-
-    -- Auto Hit loop
-    task.spawn(function()
-        while true do
-            if autoHitEnabled then
-                local ball = Workspace:FindFirstChild("Ball")
-                local char = LocalPlayer.Character
-                if char and ball and char:FindFirstChild("HumanoidRootPart") and (ball.Position - char.HumanoidRootPart.Position).Magnitude < 30 then
-                    -- Safe mouse click call
-                    if syn and syn.mouse1click then
-                        syn.mouse1click()
-                    elseif mouse1click then
-                        mouse1click()
-                    elseif mouse1press and mouse1release then
-                        mouse1press()
-                        task.wait(0.1)
-                        mouse1release()
-                    else
-                        -- No mouse click function available - do nothing
+                -- Fly logic
+                if flyEnabled then
+                    local rootPart = char:FindFirstChild("HumanoidRootPart")
+                    if rootPart then
+                        rootPart.Velocity = Vector3.new(0, 0, 0)
+                        local userInputService = game:GetService("UserInputService")
+                        local direction = Vector3.new()
+                        if userInputService:IsKeyDown(Enum.KeyCode.W) then
+                            direction = direction + workspace.CurrentCamera.CFrame.LookVector
+                        end
+                        if userInputService:IsKeyDown(Enum.KeyCode.S) then
+                            direction = direction - workspace.CurrentCamera.CFrame.LookVector
+                        end
+                        if userInputService:IsKeyDown(Enum.KeyCode.A) then
+                            direction = direction - workspace.CurrentCamera.CFrame.RightVector
+                        end
+                        if userInputService:IsKeyDown(Enum.KeyCode.D) then
+                            direction = direction + workspace.CurrentCamera.CFrame.RightVector
+                        end
+                        if userInputService:IsKeyDown(Enum.KeyCode.Space) then
+                            direction = direction + Vector3.new(0, 1, 0)
+                        end
+                        if userInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+                            direction = direction - Vector3.new(0, 1, 0)
+                        end
+                        direction = direction.Unit
+                        rootPart.Velocity = direction * flySpeed
+                        hum.PlatformStand = true
+                    end
+                else
+                    if hum.PlatformStand then
+                        hum.PlatformStand = false
                     end
                 end
             end
-            task.wait(0.1)
+        end
+    end)
+
+    -- Auto Aim & Hit logic (simplified, placeholder)
+    RunService.Heartbeat:Connect(function()
+        if autoAimEnabled then
+            -- Implement aiming logic here
+        end
+        if autoHitEnabled then
+            -- Implement auto hit logic here
+        end
+        if magBallEnabled then
+            local ball = Workspace:FindFirstChild("Ball")
+            if ball then
+                local rootPart = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if rootPart then
+                    local bodyVelocity = ball:FindFirstChild("MagnetForce")
+                    if not bodyVelocity then
+                        bodyVelocity = Instance.new("BodyVelocity")
+                        bodyVelocity.Name = "MagnetForce"
+                        bodyVelocity.MaxForce = Vector3.new(1e6, 1e6, 1e6)
+                        bodyVelocity.Parent = ball
+                    end
+                    bodyVelocity.Velocity = (rootPart.Position - ball.Position).Unit * 100 * ballSpeedMultiplier
+                end
+            end
+        else
+            local ball = Workspace:FindFirstChild("Ball")
+            if ball then
+                local bodyVelocity = ball:FindFirstChild("MagnetForce")
+                if bodyVelocity then
+                    bodyVelocity:Destroy()
+                end
+            end
         end
     end)
 end
 
-OrionLib:Init()
+-- Create Key UI first
+local KeyWindow = OrionLib:MakeWindow({
+    Name = "Enter Key",
+    HidePremium = true,
+    SaveConfig = false
+})
 
--- Show key window first
-KeyWindow:Show()
+local KeyTab = KeyWindow:MakeTab({
+    Name = "Key",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+KeyTab:AddTextbox({
+    Name = "Enter Your Key",
+    Default = "",
+    TextDisappear = true,
+    Callback = function(Key)
+        if Key == "123" then
+            OrionLib:MakeNotification({
+                Name = "Success!",
+                Content = "Correct Key entered!",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+            -- Destroy the key window first, then open main UI after a tiny delay
+            KeyWindow:Destroy()
+            task.delay(0.1, function()
+                createMainUI()
+            end)
+        else
+            OrionLib:MakeNotification({
+                Name = "Error!",
+                Content = "Incorrect Key! Try again.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+-- Start the UI by showing the key window
+-- (Already created above)
+
+print("Script loaded, waiting for key input...")
