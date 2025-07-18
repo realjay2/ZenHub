@@ -6,7 +6,7 @@ local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 
--- Settings & State
+-- State variables
 local autoAimEnabled = false
 local autoHitEnabled = false
 local walkSpeedLoop = false
@@ -17,16 +17,11 @@ local offsetX, offsetY = 10, 10
 local perfectAim = false
 local pitchPredictionEnabled = false
 local strikeZoneVisible = false
-local highlightBox = nil
 local strikeZoneBox = nil
-local correctKey = "123"
-local ballSpeedMultiplier = 2 -- Ball speed multiplier when pitching
 local magBallEnabled = false
+local ballSpeedMultiplier = 2 -- speed multiplier for ball when pitching
 
--- Root folder to browse in File Explorer
-local rootFolder = workspace
-
--- Iris Exploit UI Init (will initialize only when Iris tab activated)
+-- Iris Exploit UI Init
 local IrisLoaded = false
 local Iris = nil
 local PropertyAPIDump = nil
@@ -39,6 +34,7 @@ local InstanceViewer = nil
 local PropertyViewer = nil
 local ScriptViewer = nil
 
+-- Utility to get properties for Iris
 local function GetPropertiesForInstance(Instance)
     local Properties = {}
     for i,v in next, PropertyAPIDump do
@@ -54,6 +50,7 @@ local function GetPropertiesForInstance(Instance)
     return Properties
 end
 
+-- Recursive crawl for Iris explorer
 local function CrawlInstances(Inst)
     for _, Instance in next, Inst:GetChildren() do
         local InstTree = Iris.Tree({Instance.Name})
@@ -142,7 +139,7 @@ local function InitIris()
     end)
 end
 
--- Key Window
+-- Key System Window
 local KeyWindow = OrionLib:MakeWindow({
     Name = "HCBB Key System",
     HidePremium = false,
@@ -156,9 +153,36 @@ local KeyTab = KeyWindow:MakeTab({
     PremiumOnly = false
 })
 
-local mainWindow -- Will hold main UI window after key accepted
+local mainWindow -- will store main UI window
 
-local function createMainUI()
+KeyTab:AddTextbox({
+    Name = "Enter Key",
+    Flag = "KeyBox",
+    Placeholder = "Enter Key Here",
+    TextDisappear = true,
+    Callback = function(Key)
+        if Key == "123" then
+            OrionLib:MakeNotification({
+                Name = "Success!",
+                Content = "Correct Key entered!",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+            KeyWindow:Destroy()
+            createMainUI()
+        else
+            OrionLib:MakeNotification({
+                Name = "Error!",
+                Content = "Incorrect Key! Try again.",
+                Image = "rbxassetid://4483345998",
+                Time = 5
+            })
+        end
+    end
+})
+
+-- Function to create main UI after key success
+function createMainUI()
     mainWindow = OrionLib:MakeWindow({
         Name = "⚾ HCBB Utility",
         HidePremium = false,
@@ -340,6 +364,7 @@ local function createMainUI()
         PremiumOnly = false
     })
 
+    local rootFolder = Workspace
     local folderStack = {rootFolder}  -- stack to keep track of current folder path
 
     local FolderLabel = ExplorerTab:AddLabel({
@@ -422,7 +447,7 @@ local function createMainUI()
 
     updateList()
 
-    -- Iris Explorer Tab (new!)
+    -- Iris Explorer Tab
     local IrisTab = mainWindow:MakeTab({
         Name = "Iris Explorer",
         Icon = "rbxassetid://4483345998",
@@ -435,7 +460,6 @@ local function createMainUI()
         Callback = function(value)
             if value then
                 InitIris()
-                -- Iris UI now visible as floating windows, no blocking Orion UI
             else
                 if IrisLoaded and Iris then
                     Iris:Destroy()
@@ -470,15 +494,11 @@ local function createMainUI()
                 hum.WalkSpeed = 16
                 hum.JumpPower = 50
             end
-            if highlightBox then
-                highlightBox:Destroy()
-                highlightBox = nil
-            end
             if strikeZoneBox then
                 strikeZoneBox:Destroy()
                 strikeZoneBox = nil
             end
-            -- Clean any magnet force left
+            -- Remove any magnet force on ball
             local ball = Workspace:FindFirstChild("Ball")
             if ball then
                 local bf = ball:FindFirstChild("MagnetForce")
@@ -492,7 +512,7 @@ local function createMainUI()
         end
     })
 
-    -- Apply WalkSpeed and JumpPower continuously
+    -- Run loops to enforce WalkSpeed & JumpPower if toggled
     RunService.Heartbeat:Connect(function()
         local char = LocalPlayer.Character
         if char then
@@ -521,7 +541,7 @@ local function createMainUI()
         end
     end)
 
-    -- Auto Aim
+    -- Auto Aim logic
     RunService.RenderStepped:Connect(function()
         if autoAimEnabled then
             local ball = Workspace:FindFirstChild("Ball")
@@ -532,19 +552,77 @@ local function createMainUI()
                 hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
             end
         end
+
+        -- Perfect Aim: (This is a stub, you can replace with your bat alignment code)
+        if perfectAim then
+            -- Example: align bat with ball direction here
+        end
+
+        -- Pitch Prediction (This is a placeholder, adjust as per game specifics)
+        if pitchPredictionEnabled then
+            -- Add prediction logic here if you want
+        end
+
+        -- Mag Ball pull
+        if magBallEnabled then
+            local ball = Workspace:FindFirstChild("Ball")
+            local char = LocalPlayer.Character
+            if ball and char and char:FindFirstChild("HumanoidRootPart") then
+                local hrp = char.HumanoidRootPart
+                -- Apply a BodyPosition to pull the ball towards player
+                local bodyPos = ball:FindFirstChild("MagnetForce")
+                if not bodyPos then
+                    bodyPos = Instance.new("BodyPosition")
+                    bodyPos.Name = "MagnetForce"
+                    bodyPos.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+                    bodyPos.P = 1e4
+                    bodyPos.Parent = ball
+                end
+                bodyPos.Position = hrp.Position + Vector3.new(0, 3, 0)
+            else
+                local ball = Workspace:FindFirstChild("Ball")
+                if ball then
+                    local bf = ball:FindFirstChild("MagnetForce")
+                    if bf then bf:Destroy() end
+                end
+            end
+        else
+            -- Remove magnet force when disabled
+            local ball = Workspace:FindFirstChild("Ball")
+            if ball then
+                local bf = ball:FindFirstChild("MagnetForce")
+                if bf then bf:Destroy() end
+            end
+        end
     end)
 
-    -- Auto Hit (Left Click)
+    -- Auto Hit loop
     task.spawn(function()
         while true do
             if autoHitEnabled then
                 local ball = Workspace:FindFirstChild("Ball")
                 local char = LocalPlayer.Character
                 if char and ball and char:FindFirstChild("HumanoidRootPart") and (ball.Position - char.HumanoidRootPart.Position).Magnitude < 30 then
-                    mouse1press()
-                    task.wait(0.1)
-                    mouse1release()
+                    -- Safe mouse click call
+                    if syn and syn.mouse1click then
+                        syn.mouse1click()
+                    elseif mouse1click then
+                        mouse1click()
+                    elseif mouse1press and mouse1release then
+                        mouse1press()
+                        task.wait(0.1)
+                        mouse1release()
+                    else
+                        -- No mouse click function available - do nothing
+                    end
                 end
             end
             task.wait(0.1)
         end
+    end)
+end
+
+OrionLib:Init()
+
+-- Show key window first
+KeyWindow:Show()
