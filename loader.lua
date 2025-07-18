@@ -1,7 +1,39 @@
-print("Starting HCBB Util 2.0")
--- Load Orion UI from provided URL
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/wx-sources/OrionLibrary/main/orion-imported/OrionLibrary.lua"))()
+-- Load Orion Library safely
+local OrionLib
+do
+    local success, response = pcall(function()
+        return game:HttpGet("https://raw.githubusercontent.com/jensonhirst/Orion/main/source")
+    end)
 
+    if not success or not response or #response == 0 then
+        warn("Failed to download Orion UI library. Check your internet and exploit settings.")
+        return
+    end
+
+    local func, err = loadstring(response)
+    if not func then
+        warn("Failed to load Orion UI library: "..tostring(err))
+        return
+    end
+
+    OrionLib = func()
+end
+
+if not OrionLib then
+    warn("OrionLib is nil, aborting script.")
+    return
+end
+
+-- Check Drawing API
+if not Drawing then
+    warn("Drawing API not supported by your exploit.")
+    return
+end
+
+local json = (loadstring or load)("return " .. game:HttpGet("https://raw.githubusercontent.com/rxi/json.lua/master/json.lua"))()
+local writefile = writefile or (syn and syn.write_file)
+local readfile = readfile or (syn and syn.read_file)
+local isfile = isfile or (syn and syn.is_file)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,10 +42,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
-
--- Chat stuff
-local ChatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
-local SayMessageRequest = ChatEvents:WaitForChild("SayMessageRequest")
 
 -- State variables
 local walkSpeed = 16
@@ -33,48 +61,17 @@ local perfectAim = false
 local magBallEnabled = false
 local offsetX, offsetY = 10, 10
 
-local strikeZoneVisible = false
-local strikeZoneBox = nil
+local boxVisible = false
+local boxColor = Color3.fromRGB(0, 255, 255)
+local boxThickness = 4
 
-local trashTalkMessages = {
-    "You can't hit nun",
-    "Knowledge of a 3rd grader",
-    "your ba is probably -100",
-    "Cant blame ping on that one son",
-    "get better",
-    "womp womp",
-    "IQ of a Packet Loss",
-    "Rando Pooron",
-    "Your swing smells bad",
-    "You swinging like grandma",
-    "Bet you don't even lift",
-    "Is that all you got?",
-    "Trash talk so cold, ice age vibes"
-}
+local espEnabled = false
+local ballFillColor = Color3.new(1, 0, 0)
+local ballBorderColor = Color3.new(1, 1, 1)
 
--- Send trash talk in Roblox chat
-local function sendTrashTalk()
-    local message = trashTalkMessages[math.random(1, #trashTalkMessages)]
-    SayMessageRequest:FireServer(message, "All")
-end
+local highlight -- Highlight instance
 
--- Get strike zone adornee (SwingZone module or HomePlate or Terrain)
-local function GetStrikeZoneAdornee()
-    local hrdGui = ReplicatedStorage:FindFirstChild("HRDGui")
-    if hrdGui then
-        local swingZone = hrdGui:FindFirstChild("SwingZone")
-        if swingZone and (swingZone:IsA("BasePart") or swingZone:IsA("Model")) then
-            return swingZone
-        end
-    end
-    local plate = Workspace:FindFirstChild("HomePlate") or Workspace:FindFirstChild("StrikeZone")
-    if plate then
-        return plate
-    end
-    return Workspace.Terrain
-end
-
--- Create UI window
+-- Orion UI Window
 local Window = OrionLib:MakeWindow({
     Name = "⚾ HCBB Utility",
     HidePremium = true,
@@ -85,7 +82,8 @@ local Window = OrionLib:MakeWindow({
 -- Movement Tab
 local MovementTab = Window:MakeTab({
     Name = "Movement",
-    Icon = "rbxassetid://4483345998"
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
 })
 
 MovementTab:AddSlider({
@@ -143,14 +141,17 @@ MovementTab:AddSlider({
     Callback = function(value)
         hipHeight = value
         local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then hum.HipHeight = hipHeight end
+        if hum then
+            hum.HipHeight = hipHeight
+        end
     end
 })
 
 -- Fly Tab
 local FlyTab = Window:MakeTab({
     Name = "Fly",
-    Icon = "rbxassetid://4483345998"
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
 })
 
 FlyTab:AddToggle({
@@ -177,7 +178,8 @@ FlyTab:AddSlider({
 -- Auto Aim & Hit Tab
 local AimTab = Window:MakeTab({
     Name = "Auto Aim & Hit",
-    Icon = "rbxassetid://4483345998"
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
 })
 
 AimTab:AddToggle({
@@ -234,42 +236,262 @@ AimTab:AddToggle({
     end
 })
 
-AimTab:AddToggle({
-    Name = "Show Strike Zone",
+-- Strike Zone Tab
+local StrikeZoneTab = Window:MakeTab({
+    Name = "Strike Zone",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local box = Drawing.new("Square")
+box.Size = Vector2.new(200, 200)
+box.Color = boxColor
+box.Thickness = boxThickness
+box.Filled = false
+box.Transparency = 1
+box.Visible = false
+
+StrikeZoneTab:AddToggle({
+    Name = "Show Strike Zone Box",
     Default = false,
     Callback = function(value)
-        strikeZoneVisible = value
-        if strikeZoneVisible and not strikeZoneBox then
-            strikeZoneBox = Instance.new("BoxHandleAdornment")
-            strikeZoneBox.Size = Vector3.new(4, 4, 4)
-            strikeZoneBox.Transparency = 0.7
-            strikeZoneBox.Color3 = Color3.fromRGB(0, 255, 255)
-            strikeZoneBox.AlwaysOnTop = true
-            strikeZoneBox.ZIndex = 10
-            strikeZoneBox.Adornee = GetStrikeZoneAdornee()
-            strikeZoneBox.Parent = strikeZoneBox.Adornee
-        elseif not strikeZoneVisible and strikeZoneBox then
-            strikeZoneBox:Destroy()
-            strikeZoneBox = nil
+        boxVisible = value
+        box.Visible = boxVisible
+    end
+})
+
+StrikeZoneTab:AddColorpicker({
+    Name = "Box Color",
+    Default = boxColor,
+    Callback = function(color)
+        boxColor = color
+        box.Color = boxColor
+    end
+})
+
+StrikeZoneTab:AddSlider({
+    Name = "Box Thickness",
+    Min = 1,
+    Max = 10,
+    Default = boxThickness,
+    Increment = 1,
+    Callback = function(value)
+        boxThickness = value
+        box.Thickness = boxThickness
+    end
+})
+
+-- Ball ESP Tab
+local BallESPTab = Window:MakeTab({
+    Name = "Ball ESP",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+BallESPTab:AddToggle({
+    Name = "Enable Ball ESP",
+    Default = false,
+    Callback = function(value)
+        espEnabled = value
+        if espEnabled then
+            local ball = ReplicatedStorage:FindFirstChild("Ball")
+            if ball then
+                if not highlight then
+                    highlight = Instance.new("Highlight")
+                    highlight.Name = "BallHighlight"
+                    highlight.Adornee = ball
+                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    highlight.FillColor = ballFillColor
+                    highlight.OutlineColor = ballBorderColor
+                    highlight.Parent = ball
+                else
+                    highlight.Adornee = ball
+                    highlight.FillColor = ballFillColor
+                    highlight.OutlineColor = ballBorderColor
+                end
+            end
+        else
+            if highlight then
+                highlight:Destroy()
+                highlight = nil
+            end
         end
     end
 })
 
--- Trash Talk Tab
-local TrashTab = Window:MakeTab({
-    Name = "Trash Talk",
-    Icon = "rbxassetid://4483345998"
-})
-
-TrashTab:AddButton({
-    Name = "Send Trash Talk",
-    Callback = function()
-        sendTrashTalk()
+BallESPTab:AddColorpicker({
+    Name = "Ball Fill Color",
+    Default = ballFillColor,
+    Callback = function(color)
+        ballFillColor = color
+        if highlight then
+            highlight.FillColor = ballFillColor
+        end
     end
 })
 
--- Run loops and input handling
+BallESPTab:AddColorpicker({
+    Name = "Ball Border Color",
+    Default = ballBorderColor,
+    Callback = function(color)
+        ballBorderColor = color
+        if highlight then
+            highlight.OutlineColor = ballBorderColor
+        end
+    end
+})
 
+-- Config Tab for saving/loading config
+local ConfigTab = Window:MakeTab({
+    Name = "Config",
+    Icon = "rbxassetid://4483345998",
+    PremiumOnly = false
+})
+
+local configFileName = "HCBBConfig.json"
+
+local function saveConfig()
+    local configData = {
+        walkSpeed = walkSpeed,
+        walkSpeedEnabled = walkSpeedEnabled,
+        jumpPower = jumpPower,
+        jumpPowerEnabled = jumpPowerEnabled,
+        hipHeight = hipHeight,
+
+        flyEnabled = flyEnabled,
+        flySpeed = flySpeed,
+
+        autoAimEnabled = autoAimEnabled,
+        autoHitEnabled = autoHitEnabled,
+        perfectAim = perfectAim,
+        magBallEnabled = magBallEnabled,
+        offsetX = offsetX,
+        offsetY = offsetY,
+
+        boxVisible = boxVisible,
+        boxColor = {boxColor.R, boxColor.G, boxColor.B},
+        boxThickness = boxThickness,
+
+        espEnabled = espEnabled,
+        ballFillColor = {ballFillColor.R, ballFillColor.G, ballFillColor.B},
+        ballBorderColor = {ballBorderColor.R, ballBorderColor.G, ballBorderColor.B},
+    }
+
+    local encoded = json.encode(configData)
+    if writefile then
+        writefile(configFileName, encoded)
+        OrionLib:MakeNotification({
+            Name = "Config",
+            Content = "Config saved successfully!",
+            Time = 5
+        })
+    else
+        warn("writefile not supported, can't save config.")
+    end
+end
+
+local function loadConfig()
+    if isfile and isfile(configFileName) and readfile then
+        local content = readfile(configFileName)
+        if content then
+            local success, decoded = pcall(function() return json.decode(content) end)
+            if success and decoded then
+                walkSpeed = decoded.walkSpeed or walkSpeed
+                walkSpeedEnabled = decoded.walkSpeedEnabled or walkSpeedEnabled
+                jumpPower = decoded.jumpPower or jumpPower
+                jumpPowerEnabled = decoded.jumpPowerEnabled or jumpPowerEnabled
+                hipHeight = decoded.hipHeight or hipHeight
+
+                flyEnabled = decoded.flyEnabled or flyEnabled
+                flySpeed = decoded.flySpeed or flySpeed
+
+                autoAimEnabled = decoded.autoAimEnabled or autoAimEnabled
+                autoHitEnabled = decoded.autoHitEnabled or autoHitEnabled
+                perfectAim = decoded.perfectAim or perfectAim
+                magBallEnabled = decoded.magBallEnabled or magBallEnabled
+                offsetX = decoded.offsetX or offsetX
+                offsetY = decoded.offsetY or offsetY
+
+                boxVisible = decoded.boxVisible or boxVisible
+                local bc = decoded.boxColor
+                if bc and #bc == 3 then
+                    boxColor = Color3.new(bc[1], bc[2], bc[3])
+                end
+                boxThickness = decoded.boxThickness or boxThickness
+
+                espEnabled = decoded.espEnabled or espEnabled
+                local bfc = decoded.ballFillColor
+                if bfc and #bfc == 3 then
+                    ballFillColor = Color3.new(bfc[1], bfc[2], bfc[3])
+                end
+                local bbc = decoded.ballBorderColor
+                if bbc and #bbc == 3 then
+                    ballBorderColor = Color3.new(bbc[1], bbc[2], bbc[3])
+                end
+
+                -- Apply loaded settings to UI & effects
+                -- Movement
+                MovementTab:FindFirstChild("WalkSpeed"):SetValue(walkSpeed)
+                MovementTab:FindFirstChild("Enable WalkSpeed"):SetValue(walkSpeedEnabled)
+                MovementTab:FindFirstChild("JumpPower"):SetValue(jumpPower)
+                MovementTab:FindFirstChild("Enable JumpPower"):SetValue(jumpPowerEnabled)
+                MovementTab:FindFirstChild("HipHeight"):SetValue(hipHeight)
+
+                -- Fly
+                FlyTab:FindFirstChild("Enable Fly"):SetValue(flyEnabled)
+                FlyTab:FindFirstChild("Fly Speed"):SetValue(flySpeed)
+
+                -- Aim
+                AimTab:FindFirstChild("Auto Aim"):SetValue(autoAimEnabled)
+                AimTab:FindFirstChild("Offset X"):SetValue(offsetX)
+                AimTab:FindFirstChild("Offset Y"):SetValue(offsetY)
+                AimTab:FindFirstChild("Auto Hit (Left Click)"):SetValue(autoHitEnabled)
+                AimTab:FindFirstChild("Perfect Aim (Auto Align Bat)"):SetValue(perfectAim)
+                AimTab:FindFirstChild("Mag Ball (Pull Ball to You)"):SetValue(magBallEnabled)
+
+                -- Strike Zone
+                StrikeZoneTab:FindFirstChild("Show Strike Zone Box"):SetValue(boxVisible)
+                StrikeZoneTab:FindFirstChild("Box Color"):SetColor(boxColor)
+                StrikeZoneTab:FindFirstChild("Box Thickness"):SetValue(boxThickness)
+
+                -- Ball ESP
+                BallESPTab:FindFirstChild("Enable Ball ESP"):SetValue(espEnabled)
+                BallESPTab:FindFirstChild("Ball Fill Color"):SetColor(ballFillColor)
+                BallESPTab:FindFirstChild("Ball Border Color"):SetColor(ballBorderColor)
+
+                OrionLib:MakeNotification({
+                    Name = "Config",
+                    Content = "Config loaded successfully!",
+                    Time = 5
+                })
+            else
+                warn("Failed to decode config file.")
+            end
+        end
+    else
+        OrionLib:MakeNotification({
+            Name = "Config",
+            Content = "No config file found to load.",
+            Time = 5
+        })
+    end
+end
+
+ConfigTab:AddButton({
+    Name = "Save Config",
+    Callback = function()
+        saveConfig()
+    end
+})
+
+ConfigTab:AddButton({
+    Name = "Load Config",
+    Callback = function()
+        loadConfig()
+    end
+})
+
+-- RunService updates
 RunService.Heartbeat:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
@@ -277,37 +499,32 @@ RunService.Heartbeat:Connect(function()
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hum or not hrp then return end
 
-    -- WalkSpeed
-    if walkSpeedEnabled then
-        if hum.WalkSpeed ~= walkSpeed then
-            hum.WalkSpeed = walkSpeed
-        end
-    else
-        if hum.WalkSpeed ~= 16 then
-            hum.WalkSpeed = 16
-        end
+    if walkSpeedEnabled and hum.WalkSpeed ~= walkSpeed then
+        hum.WalkSpeed = walkSpeed
+    elseif not walkSpeedEnabled and hum.WalkSpeed ~= 16 then
+        hum.WalkSpeed = 16
     end
 
-    -- JumpPower
-    if jumpPowerEnabled then
-        if hum.JumpPower ~= jumpPower then
-            hum.JumpPower = jumpPower
-        end
-    else
-        if hum.JumpPower ~= 50 then
-            hum.JumpPower = 50
-        end
+    if jumpPowerEnabled and hum.JumpPower ~= jumpPower then
+        hum.JumpPower = jumpPower
+    elseif not jumpPowerEnabled and hum.JumpPower ~= 50 then
+        hum.JumpPower = 50
     end
 
-    -- HipHeight
     if hum.HipHeight ~= hipHeight then
         hum.HipHeight = hipHeight
     end
+end)
 
-    -- Fly Logic
+RunService.Heartbeat:Connect(function()
     if flyEnabled then
-        local camera = workspace.CurrentCamera
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        local camera = Workspace.CurrentCamera
         local moveVec = Vector3.new(0,0,0)
+
         if flyUp then moveVec = moveVec + Vector3.new(0, 1, 0) end
         if flyDown then moveVec = moveVec + Vector3.new(0, -1, 0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then
@@ -324,8 +541,8 @@ RunService.Heartbeat:Connect(function()
         end
 
         if moveVec.Magnitude > 0 then
-            moveVec = moveVec.Unit * flySpeed * RunService.Heartbeat:Wait()
-            hrp.CFrame = hrp.CFrame + moveVec
+            moveVec = moveVec.Unit * flySpeed
+            hrp.CFrame = hrp.CFrame + moveVec * RunService.Heartbeat:Wait()
         end
     end
 end)
@@ -339,7 +556,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
+UserInputService.InputEnded:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.Space then
         flyUp = false
     elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
@@ -347,57 +564,49 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
     end
 end)
 
--- Auto Aim logic
+-- Update strike zone box position every frame
 RunService.RenderStepped:Connect(function()
-    if autoAimEnabled then
-        local ball = Workspace:FindFirstChild("Ball")
-        local char = LocalPlayer.Character
-        if ball and char and char:FindFirstChild("HumanoidRootPart") then
-            local hrp = char.HumanoidRootPart
-            local dir = (ball.Position + Vector3.new(offsetX, offsetY, 0) - hrp.Position).Unit
-            hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
+    if boxVisible then
+        local cam = Workspace.CurrentCamera
+        if cam then
+            local viewport = cam.ViewportSize
+            box.Position = Vector2.new(viewport.X/2 - box.Size.X/2, viewport.Y/2 - box.Size.Y/2)
         end
     end
-
-    -- Perfect Aim stub (you can add alignment to bat here)
 end)
 
--- Auto Hit loop
-task.spawn(function()
-    while true do
-        if autoHitEnabled then
-            local ball = Workspace:FindFirstChild("Ball")
-            local char = LocalPlayer.Character
-            if char and ball and char:FindFirstChild("HumanoidRootPart") and (ball.Position - char.HumanoidRootPart.Position).Magnitude < 30 then
-                if syn and syn.mouse1click then
-                    syn.mouse1click()
-                elseif mouse1click then
-                    mouse1click()
-                elseif mouse1press and mouse1release then
-                    mouse1press()
-                    task.wait(0.1)
-                    mouse1release()
-                end
+-- Keep highlight updated if ball changes or ESP toggled
+RunService.Heartbeat:Connect(function()
+    if espEnabled then
+        local ball = ReplicatedStorage:FindFirstChild("Ball")
+        if ball then
+            if highlight and highlight.Adornee ~= ball then
+                highlight.Adornee = ball
+                highlight.FillColor = ballFillColor
+                highlight.OutlineColor = ballBorderColor
+                highlight.Parent = ball
+            elseif not highlight then
+                highlight = Instance.new("Highlight")
+                highlight.Name = "BallHighlight"
+                highlight.Adornee = ball
+                highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                highlight.FillColor = ballFillColor
+                highlight.OutlineColor = ballBorderColor
+                highlight.Parent = ball
+            end
+        else
+            if highlight then
+                highlight:Destroy()
+                highlight = nil
             end
         end
-        task.wait(0.1)
-    end
-end)
-
--- Bat swing on LeftClick (connect UserInputService)
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        if autoHitEnabled then
-            -- Swing bat logic here
-            -- (You can add bat animations or hit detection here)
-            print("Swing bat (left click)")
+    else
+        if highlight then
+            highlight:Destroy()
+            highlight = nil
         end
     end
 end)
 
-print("HCBB Utility loaded!")
-
-
--- Show Orion window
+-- Initialize Orion UI
 OrionLib:Init()
