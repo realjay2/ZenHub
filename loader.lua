@@ -21,6 +21,13 @@ local strikeZoneBox = nil
 local magBallEnabled = false
 local ballSpeedMultiplier = 2 -- speed multiplier for ball when pitching
 
+-- Noclip and Fly state
+local noclipEnabled = false
+local flyEnabled = false
+local flySpeed = 30
+local flyVelocity = Vector3.new(0,0,0)
+local userInputService = game:GetService("UserInputService")
+
 -- Iris Exploit UI Init
 local IrisLoaded = false
 local Iris = nil
@@ -232,6 +239,43 @@ function createMainUI()
         Default = false,
         Callback = function(value)
             jumpPowerLoop = value
+        end
+    })
+
+    -- Fly toggle added here:
+    MoveTab:AddToggle({
+        Name = "Fly",
+        Default = false,
+        Callback = function(value)
+            flyEnabled = value
+            if flyEnabled then
+                -- Freeze Humanoid state to avoid physics conflicts
+                local char = LocalPlayer.Character
+                if char then
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum.PlatformStand = true
+                    end
+                end
+            else
+                -- Restore Humanoid state
+                local char = LocalPlayer.Character
+                if char then
+                    local hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum.PlatformStand = false
+                    end
+                end
+            end
+        end
+    })
+
+    -- Noclip toggle added here:
+    MoveTab:AddToggle({
+        Name = "Noclip",
+        Default = false,
+        Callback = function(value)
+            noclipEnabled = value
         end
     })
 
@@ -488,11 +532,14 @@ function createMainUI()
             pitchPredictionEnabled = false
             perfectAim = false
             magBallEnabled = false
+            noclipEnabled = false
+            flyEnabled = false
             local char = LocalPlayer.Character
             if char and char:FindFirstChildOfClass("Humanoid") then
                 local hum = char:FindFirstChildOfClass("Humanoid")
                 hum.WalkSpeed = 16
                 hum.JumpPower = 50
+                hum.PlatformStand = false
             end
             if strikeZoneBox then
                 strikeZoneBox:Destroy()
@@ -536,6 +583,21 @@ function createMainUI()
                     if hum.JumpPower ~= 50 then
                         hum.JumpPower = 50
                     end
+                end
+            end
+        end
+
+        -- Noclip logic: disable collisions on character parts
+        if noclipEnabled and char then
+            for _, part in pairs(char:GetChildren()) do
+                if part:IsA("BasePart") and part.CanCollide then
+                    part.CanCollide = false
+                end
+            end
+        elseif char then
+            for _, part in pairs(char:GetChildren()) do
+                if part:IsA("BasePart") and not part.CanCollide then
+                    part.CanCollide = true
                 end
             end
         end
@@ -592,6 +654,39 @@ function createMainUI()
             if ball then
                 local bf = ball:FindFirstChild("MagnetForce")
                 if bf then bf:Destroy() end
+            end
+        end
+
+        -- Fly movement
+        if flyEnabled then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local hrp = char.HumanoidRootPart
+                local moveDir = Vector3.new(0,0,0)
+
+                if userInputService:IsKeyDown(Enum.KeyCode.W) then
+                    moveDir = moveDir + (hrp.CFrame.LookVector)
+                end
+                if userInputService:IsKeyDown(Enum.KeyCode.S) then
+                    moveDir = moveDir - (hrp.CFrame.LookVector)
+                end
+                if userInputService:IsKeyDown(Enum.KeyCode.A) then
+                    moveDir = moveDir - (hrp.CFrame.RightVector)
+                end
+                if userInputService:IsKeyDown(Enum.KeyCode.D) then
+                    moveDir = moveDir + (hrp.CFrame.RightVector)
+                end
+                if userInputService:IsKeyDown(Enum.KeyCode.Space) then
+                    moveDir = moveDir + Vector3.new(0,1,0)
+                end
+                if userInputService:IsKeyDown(Enum.KeyCode.LeftControl) or userInputService:IsKeyDown(Enum.KeyCode.C) then
+                    moveDir = moveDir - Vector3.new(0,1,0)
+                end
+
+                if moveDir.Magnitude > 0 then
+                    moveDir = moveDir.Unit * flySpeed
+                    hrp.CFrame = hrp.CFrame + moveDir * RunService.RenderStepped:Wait()
+                end
             end
         end
     end)
