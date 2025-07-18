@@ -1,5 +1,12 @@
 -- Load Rayfield UI
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua"))()
+local success, Rayfield = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua"))()
+end)
+
+if not success or not Rayfield then
+    warn("Failed to load Rayfield UI library")
+    return
+end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -8,10 +15,23 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    warn("LocalPlayer not found")
+    return
+end
 
 -- Chat stuff
-local ChatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
-local SayMessageRequest = ChatEvents:WaitForChild("SayMessageRequest")
+local ChatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents", 5)
+if not ChatEvents then
+    warn("DefaultChatSystemChatEvents not found")
+    return
+end
+
+local SayMessageRequest = ChatEvents:WaitForChild("SayMessageRequest", 5)
+if not SayMessageRequest then
+    warn("SayMessageRequest not found")
+    return
+end
 
 -- State variables
 local walkSpeed = 16
@@ -56,8 +76,14 @@ local trashTalkMessages = {
 }
 
 local function sendTrashTalk()
-    local message = trashTalkMessages[math.random(1, #trashTalkMessages)]
-    SayMessageRequest:FireServer(message, "All")
+    local success, message = pcall(function()
+        local idx = math.random(1, #trashTalkMessages)
+        return trashTalkMessages[idx]
+    end)
+    if not success or not message then return end
+    pcall(function()
+        SayMessageRequest:FireServer(message, "All")
+    end)
 end
 
 -- Function to get strike zone adornee (tries ReplicatedStorage.HRDGui.SwingZone module or fallback)
@@ -114,9 +140,11 @@ local WalkSpeedToggle = MovementTab:CreateToggle({
     Flag = "WalkSpeedToggle",
     Callback = function(value)
         walkSpeedEnabled = value
-        if not value then
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if value then
+                hum.WalkSpeed = walkSpeed
+            else
                 hum.WalkSpeed = 16
             end
         end
@@ -141,9 +169,11 @@ local JumpPowerToggle = MovementTab:CreateToggle({
     Flag = "JumpPowerToggle",
     Callback = function(value)
         jumpPowerEnabled = value
-        if not value then
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            if value then
+                hum.JumpPower = jumpPower
+            else
                 hum.JumpPower = 50
             end
         end
@@ -158,8 +188,8 @@ local HipHeightSlider = MovementTab:CreateSlider({
     CurrentValue = 2,
     Flag = "HipHeight",
     Callback = function(value)
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         hipHeight = value
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if hum then
             hum.HipHeight = hipHeight
         end
@@ -271,8 +301,14 @@ AimTab:CreateToggle({
             strikeZoneBox.AlwaysOnTop = true
             strikeZoneBox.ZIndex = 10
             local adornee = GetStrikeZoneAdornee()
-            strikeZoneBox.Adornee = adornee
-            strikeZoneBox.Parent = adornee
+            if adornee then
+                strikeZoneBox.Adornee = adornee
+                strikeZoneBox.Parent = adornee
+            else
+                warn("Could not find strike zone adornee for box")
+                strikeZoneBox:Destroy()
+                strikeZoneBox = nil
+            end
         elseif (not strikeZoneVisible) and strikeZoneBox then
             strikeZoneBox:Destroy()
             strikeZoneBox = nil
@@ -292,19 +328,24 @@ TrashTab:CreateButton({
 
 -- Utility function to create or update ball highlight
 local function updateBallHighlight(ball)
+    if not ball or not ball:IsA("BasePart") then return end
     if not ballHighlight then
         ballHighlight = Instance.new("SelectionBox")
-        ballHighlight.Adornee = ball
         ballHighlight.LineThickness = 0.05
         ballHighlight.Color3 = Color3.new(1, 0, 0)
+        ballHighlight.Adornee = ball
         ballHighlight.Parent = ball
+    else
+        if ballHighlight.Adornee ~= ball then
+            ballHighlight.Adornee = ball
+        end
     end
-    ballHighlight.Adornee = ball
 end
 
 -- Utility function to create or update projection part (small sphere showing projected ball position)
 local function updateProjectionPart(pos)
-    if not projectionPart then
+    if not pos or typeof(pos) ~= "Vector3" then return end
+    if not projectionPart or not projectionPart.Parent then
         projectionPart = Instance.new("Part")
         projectionPart.Shape = Enum.PartType.Ball
         projectionPart.Material = Enum.Material.Neon
@@ -320,7 +361,6 @@ end
 
 -- Function to predict ball path and project in strike zone
 local function predictBallProjection(ball)
-    -- Simple prediction: project ball velocity for next 0.5 seconds in 0.1s increments
     if not ball or not ball:IsA("BasePart") then return end
     if not ball.Velocity then return end
 
@@ -331,25 +371,29 @@ local function predictBallProjection(ball)
     local position = ball.Position
     local velocity = ball.Velocity
 
-    for t = dt, predictionTime, dt do
-        -- s = ut + 0.5at^2
-        local predictedPos = position + velocity * t + Vector3.new(0, -0.5 * gravity * t * t, 0)
-        updateProjectionPart(predictedPos)
-    end
+    -- Just one projection point at 0.5 seconds (you can make more if needed)
+    local t = predictionTime
+    local predictedPos = position + velocity * t + Vector3.new(0, -0.5 * gravity * t * t, 0)
+    updateProjectionPart(predictedPos)
 end
 
 -- Function to swing bat (simulate left mouse click)
 local function swingBat()
-    if syn and syn.mouse1click then
-        syn.mouse1click()
-    elseif mouse1click then
-        mouse1click()
-    elseif mouse1press and mouse1release then
-        mouse1press()
-        task.wait(0.1)
-        mouse1release()
-    else
-        -- no mouse click method, do nothing
+    local success, err = pcall(function()
+        if syn and syn.mouse1click then
+            syn.mouse1click()
+        elseif mouse1click then
+            mouse1click()
+        elseif mouse1press and mouse1release then
+            mouse1press()
+            task.wait(0.1)
+            mouse1release()
+        else
+            -- no mouse click method available
+        end
+    end)
+    if not success then
+        warn("Failed to swing bat: ".. tostring(err))
     end
 end
 
@@ -362,25 +406,17 @@ RunService.Heartbeat:Connect(function(deltaTime)
     if not hum or not hrp then return end
 
     -- WalkSpeed
-    if walkSpeedEnabled then
-        if hum.WalkSpeed ~= walkSpeed then
-            hum.WalkSpeed = walkSpeed
-        end
-    else
-        if hum.WalkSpeed ~= 16 then
-            hum.WalkSpeed = 16
-        end
+    if walkSpeedEnabled and hum.WalkSpeed ~= walkSpeed then
+        hum.WalkSpeed = walkSpeed
+    elseif (not walkSpeedEnabled) and hum.WalkSpeed ~= 16 then
+        hum.WalkSpeed = 16
     end
 
     -- JumpPower
-    if jumpPowerEnabled then
-        if hum.JumpPower ~= jumpPower then
-            hum.JumpPower = jumpPower
-        end
-    else
-        if hum.JumpPower ~= 50 then
-            hum.JumpPower = 50
-        end
+    if jumpPowerEnabled and hum.JumpPower ~= jumpPower then
+        hum.JumpPower = jumpPower
+    elseif (not jumpPowerEnabled) and hum.JumpPower ~= 50 then
+        hum.JumpPower = 50
     end
 
     -- HipHeight
@@ -428,22 +464,25 @@ RunService.Heartbeat:Connect(function(deltaTime)
 
         -- MagBall: pull ball to you
         if magBallEnabled then
-            ball.Velocity = (hrp.Position - ball.Position).Unit * 150
+            local dir = (hrp.Position - ball.Position)
+            if dir.Magnitude > 0 then
+                ball.Velocity = dir.Unit * 150
+            end
         end
 
         -- Auto Aim: rotate player to face ball with offsets
         if autoAimEnabled then
-            local dir = (ball.Position + Vector3.new(offsetX, offsetY, 0) - hrp.Position).Unit
-            hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
+            local dir = (ball.Position + Vector3.new(offsetX, offsetY, 0) - hrp.Position)
+            if dir.Magnitude > 0 then
+                hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
+            end
         end
 
-        -- Perfect Aim (auto align bat) stub - add your bat alignment here if needed
+        -- Perfect Aim (auto align bat) stub - place your code here if desired
 
         -- Auto Hit: if ball is close and enabled, swing bat on left click
-        if autoHitEnabled then
-            if (ball.Position - hrp.Position).Magnitude < 30 then
-                swingBat()
-            end
+        if autoHitEnabled and (ball.Position - hrp.Position).Magnitude < 30 then
+            swingBat()
         end
     else
         -- No ball found: cleanup highlight and projection
@@ -474,8 +513,5 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
         flyDown = false
     end
 end)
-
--- Handle mouse input for perfect aim or other features if needed
--- (Add your mouse detection code here if you want)
 
 -- END OF SCRIPT
