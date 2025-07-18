@@ -28,23 +28,15 @@ local ballSpeedMultiplier = 2 -- speed multiplier for ball when pitching
 
 -- Trash Talk messages
 local trashTalkMessages = {
-    "You can't hit nun",
-    "Knowledge of a 3rd grader",
-    "your ba is probably -100",
-    "Cant blame ping on that one son",
-    "get better",
-    "womp womp",
-    "IQ of a Packet Loss",
-    "Rando Pooron",
+    "You can't hit this!",
+    "Too slow!",
+    "Is that all you've got?",
+    "Swing and miss!",
+    "Better luck next time!",
+    "I'm warming up!",
+    "Strike one!",
+    "Bring it on!",
 }
-
--- Iris Exploit UI Init (optional, can be removed if unused)
-local IrisLoaded = false
-local Iris = nil
-local PropertyAPIDump = nil
-local ScriptContent = [[]]
-local SelectedInstance = nil
-local Properties = {}
 
 -- Function to send a random trash talk message in chat
 local function sendTrashTalk()
