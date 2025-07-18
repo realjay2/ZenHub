@@ -1,403 +1,167 @@
 -- Load Rayfield UI
 local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua"))()
 
+-- Services
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local UserInputService = game:GetService("UserInputService")
-
+local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 
--- Chat stuff
+-- Character
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HRP = Character:WaitForChild("HumanoidRootPart")
+
+-- Chat Event
 local ChatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
 local SayMessageRequest = ChatEvents:WaitForChild("SayMessageRequest")
 
--- State variables
-local walkSpeed = 16
-local jumpPower = 50
-local hipHeight = 2
-local walkSpeedEnabled = false
-local jumpPowerEnabled = false
-
-local flyEnabled = false
-local flySpeed = 30
-local flyUp = false
-local flyDown = false
-
-local autoAimEnabled = false
-local autoHitEnabled = false
-local perfectAim = false
-local magBallEnabled = false
-local offsetX, offsetY = 10, 10
-
-local strikeZoneVisible = false
-local strikeZoneBox = nil
-
--- Trash talk messages
+-- Trash Talk Messages
 local trashTalkMessages = {
     "You can't hit nun",
     "Knowledge of a 3rd grader",
-    "your ba is probably -100",
-    "Cant blame ping on that one son",
-    "get better",
-    "womp womp",
-    "IQ of a Packet Loss",
-    "Rando Pooron",
+    "Your BA is probably -100",
+    "Can't blame ping on that one son",
+    "Get better",
+    "Womp womp",
+    "IQ of a packet loss",
+    "Rando Pooron"
 }
 
-local function sendTrashTalk()
-    local message = trashTalkMessages[math.random(1, #trashTalkMessages)]
-    SayMessageRequest:FireServer(message, "All")
-end
+-- States
+local flying = false
+local walkspeedEnabled = false
+local flySpeed = 1
+local wsSpeed = 16
 
--- Function to get strike zone adornee
-local function GetStrikeZoneAdornee()
-    -- Try ReplicatedStorage.HRDGui.SwingZone Module
-    local hrdGui = ReplicatedStorage:FindFirstChild("HRDGui")
-    if hrdGui then
-        local swingZone = hrdGui:FindFirstChild("SwingZone")
-        if swingZone and (swingZone:IsA("BasePart") or swingZone:IsA("Model")) then
-            return swingZone
-        end
-    end
-    -- Fallback to Workspace HomePlate or StrikeZone
-    local plate = Workspace:FindFirstChild("HomePlate") or Workspace:FindFirstChild("StrikeZone")
-    if plate then
-        return plate
-    end
-    -- Last fallback to Terrain (will be invisible)
-    return Workspace.Terrain
-end
+-- UI Setup
+Rayfield:CreateWindow({Name = "Phoenix Ultra ⚾", LoadingTitle = "Initializing", ConfigurationSaving = {Enabled = false}})
 
--- UI setup
-local Window = Rayfield:CreateWindow({
-    Name = "⚾ HCBB Utility",
-    LoadingTitle = "Loading HCBB Utility",
-    LoadingSubtitle = "by Kai",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = nil,
-        FileName = "HCBBConfig"
-    },
-    Discord = {
-        Enabled = false,
-        Invite = "",
-        RememberJoins = true
-    }
+local MainTab = Rayfield:CreateTab({Name = "Main", Icon = "🏃"})
+local GameTab = Rayfield:CreateTab({Name = "Game Tools", Icon = "🧠"})
+local MiscTab = Rayfield:CreateTab({Name = "Misc", Icon = "🎯"})
+
+-- Fly
+MainTab:CreateToggle({
+    Name = "Fly (CFrame)",
+    CurrentValue = false,
+    Callback = function(state)
+        flying = state
+    end,
 })
 
--- Movement Tab
-local MovementTab = Window:CreateTab("Movement", 4483345998)
+-- WalkSpeed
+MainTab:CreateToggle({
+    Name = "WalkSpeed (CFrame)",
+    CurrentValue = false,
+    Callback = function(state)
+        walkspeedEnabled = state
+    end,
+})
 
-local WalkSpeedSlider = MovementTab:CreateSlider({
-    Name = "WalkSpeed",
-    Range = {16, 30},
+MainTab:CreateSlider({
+    Name = "Speed",
+    Range = {1, 30},
     Increment = 1,
-    Suffix = "WalkSpeed",
     CurrentValue = 16,
-    Flag = "WalkSpeed",
     Callback = function(value)
-        walkSpeed = value
-    end
-})
-
-local WalkSpeedToggle = MovementTab:CreateToggle({
-    Name = "Enable WalkSpeed",
-    CurrentValue = false,
-    Flag = "WalkSpeedToggle",
-    Callback = function(value)
-        walkSpeedEnabled = value
-        if not value then
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum.WalkSpeed = 16
-            end
-        end
-    end
-})
-
-local JumpPowerSlider = MovementTab:CreateSlider({
-    Name = "JumpPower",
-    Range = {50, 100},
-    Increment = 1,
-    Suffix = "JumpPower",
-    CurrentValue = 50,
-    Flag = "JumpPower",
-    Callback = function(value)
-        jumpPower = value
-    end
-})
-
-local JumpPowerToggle = MovementTab:CreateToggle({
-    Name = "Enable JumpPower",
-    CurrentValue = false,
-    Flag = "JumpPowerToggle",
-    Callback = function(value)
-        jumpPowerEnabled = value
-        if not value then
-            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum then
-                hum.JumpPower = 50
-            end
-        end
-    end
-})
-
-local HipHeightSlider = MovementTab:CreateSlider({
-    Name = "HipHeight",
-    Range = {0, 10},
-    Increment = 0.1,
-    Suffix = "studs",
-    CurrentValue = 2,
-    Flag = "HipHeight",
-    Callback = function(value)
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        hipHeight = value
-        if hum then
-            hum.HipHeight = hipHeight
-        end
-    end
-})
-
--- Fly Tab
-local FlyTab = Window:CreateTab("Fly", 4483345998)
-
-local FlyToggle = FlyTab:CreateToggle({
-    Name = "Enable Fly",
-    CurrentValue = false,
-    Flag = "FlyToggle",
-    Callback = function(value)
-        flyEnabled = value
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum.PlatformStand = value
-        end
-    end
-})
-
-local FlySpeedSlider = FlyTab:CreateSlider({
-    Name = "Fly Speed",
-    Range = {1, 50},
-    Increment = 1,
-    Suffix = "speed",
-    CurrentValue = 30,
-    Flag = "FlySpeed",
-    Callback = function(value)
+        wsSpeed = value
         flySpeed = value
-    end
+    end,
 })
 
--- Auto Aim & Hit Tab
-local AimTab = Window:CreateTab("Auto Aim & Hit", 4483345998)
-
-local AutoAimToggle = AimTab:CreateToggle({
-    Name = "Auto Aim",
-    CurrentValue = false,
-    Flag = "AutoAim",
-    Callback = function(value)
-        autoAimEnabled = value
-    end
-})
-
-AimTab:CreateSlider({
-    Name = "Offset X",
-    Range = {-20, 100},
+-- HipHeight
+MiscTab:CreateSlider({
+    Name = "Hip Height",
+    Range = {0, 50},
     Increment = 1,
-    Suffix = "offset",
-    CurrentValue = 10,
-    Flag = "OffsetX",
+    CurrentValue = 2,
     Callback = function(value)
-        offsetX = value
-    end
+        Humanoid.HipHeight = value
+    end,
 })
 
-AimTab:CreateSlider({
-    Name = "Offset Y",
-    Range = {-20, 100},
-    Increment = 1,
-    Suffix = "offset",
-    CurrentValue = 10,
-    Flag = "OffsetY",
-    Callback = function(value)
-        offsetY = value
-    end
-})
-
-local AutoHitToggle = AimTab:CreateToggle({
-    Name = "Auto Hit (Left Click)",
-    CurrentValue = false,
-    Flag = "AutoHit",
-    Callback = function(value)
-        autoHitEnabled = value
-    end
-})
-
-local PerfectAimToggle = AimTab:CreateToggle({
-    Name = "Perfect Aim (Auto Align Bat)",
-    CurrentValue = false,
-    Flag = "PerfectAim",
-    Callback = function(value)
-        perfectAim = value
-    end
-})
-
-local MagBallToggle = AimTab:CreateToggle({
-    Name = "Mag Ball (Pull Ball to You)",
-    CurrentValue = false,
-    Flag = "MagBall",
-    Callback = function(value)
-        magBallEnabled = value
-    end
-})
-
--- Trash Talk Tab
-local TrashTab = Window:CreateTab("Trash Talk", 4483345998)
-
-TrashTab:CreateButton({
-    Name = "Send Trash Talk",
+-- Trash Talk
+MiscTab:CreateButton({
+    Name = "Trash Talk",
     Callback = function()
-        sendTrashTalk()
-    end
+        local msg = trashTalkMessages[math.random(1, #trashTalkMessages)]
+        SayMessageRequest:FireServer(msg, "All")
+    end,
 })
 
--- Strike Zone Toggle (to show box adornment)
-AimTab:CreateToggle({
-    Name = "Show Strike Zone",
-    CurrentValue = false,
-    Flag = "ShowStrikeZone",
-    Callback = function(value)
-        strikeZoneVisible = value
-        if strikeZoneVisible and not strikeZoneBox then
-            strikeZoneBox = Instance.new("BoxHandleAdornment")
-            strikeZoneBox.Size = Vector3.new(4, 4, 4)
-            strikeZoneBox.Transparency = 0.7
-            strikeZoneBox.Color3 = Color3.fromRGB(0, 255, 255)
-            strikeZoneBox.AlwaysOnTop = true
-            strikeZoneBox.ZIndex = 10
-            strikeZoneBox.Adornee = GetStrikeZoneAdornee()
-            strikeZoneBox.Parent = strikeZoneBox.Adornee
-        elseif (not strikeZoneVisible) and strikeZoneBox then
-            strikeZoneBox:Destroy()
-            strikeZoneBox = nil
-        end
-    end
-})
+-- Ball Highlighter & Strike Zone Projection
+GameTab:CreateButton({
+    Name = "Highlight Ball & Project",
+    Callback = function()
+        local ball = workspace:FindFirstChild("Ball")
+        local gui = ReplicatedStorage:FindFirstChild("HRDGui")
+        if not (ball and gui) then return end
 
--- Runservice updates
-RunService.Heartbeat:Connect(function()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hum or not hrp then return end
-
-    -- WalkSpeed
-    if walkSpeedEnabled then
-        if hum.WalkSpeed ~= walkSpeed then
-            hum.WalkSpeed = walkSpeed
-        end
-    else
-        if hum.WalkSpeed ~= 16 then
-            hum.WalkSpeed = 16
-        end
-    end
-
-    -- JumpPower
-    if jumpPowerEnabled then
-        if hum.JumpPower ~= jumpPower then
-            hum.JumpPower = jumpPower
-        end
-    else
-        if hum.JumpPower ~= 50 then
-            hum.JumpPower = 50
-        end
-    end
-
-    -- HipHeight
-    if hum.HipHeight ~= hipHeight then
-        hum.HipHeight = hipHeight
-    end
-
-    -- Fly logic
-    if flyEnabled then
-        local camera = workspace.CurrentCamera
-        local moveVec = Vector3.new(0,0,0)
-        if flyUp then
-            moveVec = moveVec + Vector3.new(0, 1, 0)
-        end
-        if flyDown then
-            moveVec = moveVec + Vector3.new(0, -1, 0)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-            moveVec = moveVec + (camera.CFrame.LookVector * Vector3.new(1,0,1).Unit)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-            moveVec = moveVec - (camera.CFrame.LookVector * Vector3.new(1,0,1).Unit)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-            moveVec = moveVec - (camera.CFrame.RightVector * Vector3.new(1,0,1).Unit)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-            moveVec = moveVec + (camera.CFrame.RightVector * Vector3.new(1,0,1).Unit)
+        -- Highlight
+        if not ball:FindFirstChild("SelectionBox") then
+            local sel = Instance.new("SelectionBox", ball)
+            sel.Adornee = ball
+            sel.Color3 = Color3.new(1, 1, 0)
+            sel.LineThickness = 0.05
         end
 
-        if moveVec.Magnitude > 0 then
-            moveVec = moveVec.Unit * flySpeed
-            hrp.CFrame = hrp.CFrame + moveVec * RunService.Heartbeat:Wait()
-        end
-    end
-end)
+        -- Predict path
+        local projection = Instance.new("Part", workspace)
+        projection.Anchored = true
+        projection.CanCollide = false
+        projection.Transparency = 0.5
+        projection.Color = Color3.new(0, 1, 0)
+        projection.Material = Enum.Material.Neon
+        projection.Shape = Enum.PartType.Ball
+        projection.Size = Vector3.new(0.5, 0.5, 0.5)
 
--- Detect fly up/down keys
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-    if input.KeyCode == Enum.KeyCode.Space then
-        flyUp = true
-    elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
-        flyDown = true
-    end
-end)
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if input.KeyCode == Enum.KeyCode.Space then
-        flyUp = false
-    elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
-        flyDown = false
-    end
-end)
+        -- Simple prediction
+        local predictedPos = ball.Position + ball.Velocity * 0.5
+        projection.Position = predictedPos
 
--- Auto Aim logic (simple version)
-RunService.RenderStepped:Connect(function()
-    if autoAimEnabled then
-        local ball = Workspace:FindFirstChild("Ball")
-        local char = LocalPlayer.Character
-        if ball and char and char:FindFirstChild("HumanoidRootPart") then
-            local hrp = char.HumanoidRootPart
-            local dir = (ball.Position + Vector3.new(offsetX, offsetY, 0) - hrp.Position).Unit
-            hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
-        end
-    end
-    -- Perfect Aim stub here if you want
-end)
+        -- Check if it's in strike zone
+        local swingZone = gui:FindFirstChild("SwingZone")
+        if swingZone then
+            local zoneCF = swingZone.CFrame
+            local zoneSize = swingZone.Size
+            local inZone = (predictedPos.X >= (zoneCF.X - zoneSize.X/2) and predictedPos.X <= (zoneCF.X + zoneSize.X/2)) and
+                           (predictedPos.Y >= (zoneCF.Y - zoneSize.Y/2) and predictedPos.Y <= (zoneCF.Y + zoneSize.Y/2)) and
+                           (predictedPos.Z >= (zoneCF.Z - zoneSize.Z/2) and predictedPos.Z <= (zoneCF.Z + zoneSize.Z/2))
 
--- Auto Hit loop
-task.spawn(function()
-    while true do
-        if autoHitEnabled then
-            local ball = Workspace:FindFirstChild("Ball")
-            local char = LocalPlayer.Character
-            if char and ball and char:FindFirstChild("HumanoidRootPart") and (ball.Position - char.HumanoidRootPart.Position).Magnitude < 30 then
-                if syn and syn.mouse1click then
-                    syn.mouse1click()
-                elseif mouse1click then
-                    mouse1click()
-                elseif mouse1press and mouse1release then
-                    mouse1press()
-                    task.wait(0.1)
-                    mouse1release()
-                end
+            if inZone then
+                projection.Color = Color3.new(0, 1, 0) -- green
+            else
+                projection.Color = Color3.new(1, 0, 0) -- red
             end
         end
-        task.wait(0.1)
+    end,
+})
+
+-- Input: Left Click to Swing Bat
+Mouse.Button1Down:Connect(function()
+    local tool = Character:FindFirstChildOfClass("Tool")
+    if tool and tool:FindFirstChild("Swing") then
+        pcall(function()
+            tool.Swing:FireServer()
+        end)
+    end
+end)
+
+-- Fly / WS Logic
+RunService.RenderStepped:Connect(function()
+    if flying or walkspeedEnabled then
+        local direction = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W) then direction += workspace.CurrentCamera.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then direction -= workspace.CurrentCamera.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then direction -= workspace.CurrentCamera.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then direction += workspace.CurrentCamera.CFrame.RightVector end
+
+        direction = direction.Unit
+        if direction.Magnitude > 0 then
+            HRP.CFrame = HRP.CFrame + (direction * (flying and flySpeed or wsSpeed) * RunService.RenderStepped:Wait())
+        end
     end
 end)
