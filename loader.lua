@@ -1,242 +1,262 @@
+-- Load Rayfield UI
 local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua"))()
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Chat stuff
+local ChatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents")
+local SayMessageRequest = ChatEvents:WaitForChild("SayMessageRequest")
 
 -- State variables
-local autoAimEnabled = false
-local autoHitEnabled = false
-local walkSpeedLoop = false
-local jumpPowerLoop = false
-local noclipEnabled = false
+local walkSpeed = 16
+local jumpPower = 50
+local hipHeight = 2
+local walkSpeedEnabled = false
+local jumpPowerEnabled = false
+
 local flyEnabled = false
 local flySpeed = 30
-local walkSpeed = 16
-local jumpPower = 65
-local hipHeight = 2
-local offsetX, offsetY = 10, 10
-local perfectAim = false
-local pitchPredictionEnabled = false
-local strikeZoneVisible = false
-local strikeZoneBox = nil
-local magBallEnabled = false
-local ballSpeedMultiplier = 2 -- speed multiplier for ball when pitching
+local flyVelocity = Vector3.new(0,0,0)
+local flyUp = false
+local flyDown = false
 
--- Trash Talk messages
+local autoAimEnabled = false
+local autoHitEnabled = false
+local perfectAim = false
+local magBallEnabled = false
+local offsetX, offsetY = 10, 10
+
+-- Trash talk messages
 local trashTalkMessages = {
-    "You can't hit this!",
-    "Too slow!",
-    "Is that all you've got?",
-    "Swing and miss!",
-    "Better luck next time!",
-    "I'm warming up!",
-    "Strike one!",
-    "Bring it on!",
+    "You can't hit nun",
+    "Knowledge of a 3rd grader",
+    "your ba is probably -100",
+    "Cant blame ping on that one son",
+    "get better",
+    "womp womp",
+    "IQ of a Packet Loss",
+    "Rando Pooron",
 }
 
--- Function to send a random trash talk message in chat
 local function sendTrashTalk()
     local message = trashTalkMessages[math.random(1, #trashTalkMessages)]
-    game:GetService("ReplicatedStorage"):WaitForChild("DefaultChatSystemChatEvents"):WaitForChild("SayMessageRequest"):FireServer(message, "All")
+    SayMessageRequest:FireServer(message, "All")
 end
 
--- Main Window
+-- UI setup
 local Window = Rayfield:CreateWindow({
     Name = "⚾ HCBB Utility",
-    LoadingTitle = "Loading HCBB Utility...",
-    LoadingSubtitle = "by Mike",
+    LoadingTitle = "Loading HCBB Utility",
+    LoadingSubtitle = "by Kai",
     ConfigurationSaving = {
         Enabled = true,
         FolderName = nil,
-        FileName = "HCBBMainConfig"
+        FileName = "HCBBConfig"
     },
     Discord = {
         Enabled = false,
-        Invite = "",
-        RememberJoins = false
-    },
-    KeySystem = false
+        Invite = "", 
+        RememberJoins = true
+    }
 })
 
 -- Movement Tab
-local MoveTab = Window:CreateTab("Movement")
+local MovementTab = Window:CreateTab("Movement", 4483345998)
 
-MoveTab:CreateSlider({
+local WalkSpeedSlider = MovementTab:CreateSlider({
     Name = "WalkSpeed",
-    Range = {16, 29},
+    Range = {16, 30},
     Increment = 1,
-    Suffix = "",
+    Suffix = "WalkSpeed",
     CurrentValue = 16,
-    Flag = "WalkSpeedSlider",
+    Flag = "WalkSpeed",
     Callback = function(value)
         walkSpeed = value
-    end,
+    end
 })
 
-MoveTab:CreateToggle({
-    Name = "Loop WalkSpeed",
+local WalkSpeedToggle = MovementTab:CreateToggle({
+    Name = "Enable WalkSpeed",
     CurrentValue = false,
-    Flag = "WalkSpeedLoop",
+    Flag = "WalkSpeedToggle",
     Callback = function(value)
-        walkSpeedLoop = value
-    end,
+        walkSpeedEnabled = value
+        if not value then
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.WalkSpeed = 16
+            end
+        end
+    end
 })
 
-MoveTab:CreateSlider({
+local JumpPowerSlider = MovementTab:CreateSlider({
     Name = "JumpPower",
-    Range = {50, 65},
+    Range = {50, 100},
     Increment = 1,
-    Suffix = "",
+    Suffix = "JumpPower",
     CurrentValue = 50,
-    Flag = "JumpPowerSlider",
+    Flag = "JumpPower",
     Callback = function(value)
         jumpPower = value
-    end,
+    end
 })
 
-MoveTab:CreateToggle({
-    Name = "Loop JumpPower",
+local JumpPowerToggle = MovementTab:CreateToggle({
+    Name = "Enable JumpPower",
     CurrentValue = false,
-    Flag = "JumpPowerLoop",
+    Flag = "JumpPowerToggle",
     Callback = function(value)
-        jumpPowerLoop = value
-    end,
+        jumpPowerEnabled = value
+        if not value then
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.JumpPower = 50
+            end
+        end
+    end
 })
 
-MoveTab:CreateSlider({
+local HipHeightSlider = MovementTab:CreateSlider({
     Name = "HipHeight",
     Range = {0, 10},
     Increment = 0.1,
-    Suffix = "",
+    Suffix = "studs",
     CurrentValue = 2,
-    Flag = "HipHeightSlider",
+    Flag = "HipHeight",
     Callback = function(value)
         hipHeight = value
-    end,
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.HipHeight = hipHeight
+        end
+    end
 })
 
-MoveTab:CreateToggle({
-    Name = "Noclip",
-    CurrentValue = false,
-    Flag = "NoclipToggle",
-    Callback = function(value)
-        noclipEnabled = value
-    end,
-})
+-- Fly Tab
+local FlyTab = Window:CreateTab("Fly", 4483345998)
 
-MoveTab:CreateToggle({
-    Name = "Fly",
+local FlyToggle = FlyTab:CreateToggle({
+    Name = "Enable Fly",
     CurrentValue = false,
     Flag = "FlyToggle",
     Callback = function(value)
         flyEnabled = value
-    end,
+        if not value then
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.PlatformStand = false
+            end
+        else
+            local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if hum then
+                hum.PlatformStand = true
+            end
+        end
+    end
 })
 
-MoveTab:CreateSlider({
+local FlySpeedSlider = FlyTab:CreateSlider({
     Name = "Fly Speed",
     Range = {1, 50},
     Increment = 1,
-    Suffix = "",
+    Suffix = "speed",
     CurrentValue = 30,
-    Flag = "FlySpeedSlider",
+    Flag = "FlySpeed",
     Callback = function(value)
         flySpeed = value
-    end,
+    end
 })
 
 -- Auto Aim & Hit Tab
-local AimTab = Window:CreateTab("Auto Aim & Hit")
+local AimTab = Window:CreateTab("Auto Aim & Hit", 4483345998)
 
-AimTab:CreateToggle({
+local AutoAimToggle = AimTab:CreateToggle({
     Name = "Auto Aim",
     CurrentValue = false,
-    Flag = "AutoAimToggle",
+    Flag = "AutoAim",
     Callback = function(value)
         autoAimEnabled = value
-    end,
+    end
 })
 
 AimTab:CreateSlider({
     Name = "Offset X",
     Range = {-20, 100},
     Increment = 1,
-    Suffix = "",
+    Suffix = "offset",
     CurrentValue = 10,
-    Flag = "OffsetXSlider",
+    Flag = "OffsetX",
     Callback = function(value)
         offsetX = value
-    end,
+    end
 })
 
 AimTab:CreateSlider({
     Name = "Offset Y",
     Range = {-20, 100},
     Increment = 1,
-    Suffix = "",
+    Suffix = "offset",
     CurrentValue = 10,
-    Flag = "OffsetYSlider",
+    Flag = "OffsetY",
     Callback = function(value)
         offsetY = value
-    end,
+    end
 })
 
-AimTab:CreateToggle({
+local AutoHitToggle = AimTab:CreateToggle({
     Name = "Auto Hit (Left Click)",
     CurrentValue = false,
-    Flag = "AutoHitToggle",
+    Flag = "AutoHit",
     Callback = function(value)
         autoHitEnabled = value
-    end,
+    end
 })
 
-AimTab:CreateToggle({
-    Name = "Mag Ball (Pull Ball to You)",
-    CurrentValue = false,
-    Flag = "MagBallToggle",
-    Callback = function(value)
-        magBallEnabled = value
-    end,
-})
-
-AimTab:CreateToggle({
+local PerfectAimToggle = AimTab:CreateToggle({
     Name = "Perfect Aim (Auto Align Bat)",
     CurrentValue = false,
-    Flag = "PerfectAimToggle",
+    Flag = "PerfectAim",
     Callback = function(value)
         perfectAim = value
-    end,
+    end
+})
+
+local MagBallToggle = AimTab:CreateToggle({
+    Name = "Mag Ball (Pull Ball to You)",
+    CurrentValue = false,
+    Flag = "MagBall",
+    Callback = function(value)
+        magBallEnabled = value
+    end
 })
 
 -- Trash Talk Tab
-local TrashTab = Window:CreateTab("Trash Talk")
+local TrashTab = Window:CreateTab("Trash Talk", 4483345998)
 
 TrashTab:CreateButton({
-    Name = "Send Trash Talk Message",
+    Name = "Send Trash Talk",
     Callback = function()
         sendTrashTalk()
-    end,
+    end
 })
 
--- Variables for fly
-local flyVelocity = nil
-local flyGyro = nil
-local flying = false
-
--- RunService Loop
-RunService.Heartbeat:Connect(function(delta)
+-- Runservice updates
+RunService.Heartbeat:Connect(function()
     local char = LocalPlayer.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hum or not hrp then return end
 
-    -- WalkSpeed enforcement
-    if walkSpeedLoop then
+    -- WalkSpeed
+    if walkSpeedEnabled then
         if hum.WalkSpeed ~= walkSpeed then
             hum.WalkSpeed = walkSpeed
         end
@@ -246,8 +266,8 @@ RunService.Heartbeat:Connect(function(delta)
         end
     end
 
-    -- JumpPower enforcement
-    if jumpPowerLoop then
+    -- JumpPower
+    if jumpPowerEnabled then
         if hum.JumpPower ~= jumpPower then
             hum.JumpPower = jumpPower
         end
@@ -257,96 +277,63 @@ RunService.Heartbeat:Connect(function(delta)
         end
     end
 
-    -- HipHeight enforcement
+    -- HipHeight
     if hum.HipHeight ~= hipHeight then
         hum.HipHeight = hipHeight
     end
 
-    -- Noclip toggle
-    if noclipEnabled then
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    else
-        for _, part in pairs(char:GetChildren()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = true
-            end
-        end
-    end
-
-    -- Fly toggle with full pitch + yaw orientation follow camera
+    -- Fly logic
     if flyEnabled then
-        if not flying then
-            flying = true
-            hum.PlatformStand = true
-
-            if not flyVelocity then
-                flyVelocity = Instance.new("BodyVelocity")
-                flyVelocity.Name = "FlyVelocity"
-                flyVelocity.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                flyVelocity.Velocity = Vector3.new(0,0,0)
-                flyVelocity.Parent = hrp
-            end
-
-            if not flyGyro then
-                flyGyro = Instance.new("BodyGyro")
-                flyGyro.Name = "FlyGyro"
-                flyGyro.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-                flyGyro.CFrame = hrp.CFrame
-                flyGyro.Parent = hrp
-            end
+        hum.PlatformStand = true
+        local camera = workspace.CurrentCamera
+        local moveVec = Vector3.new(0,0,0)
+        if flyUp then
+            moveVec = moveVec + Vector3.new(0, 1, 0)
         end
-
-        local camCF = workspace.CurrentCamera.CFrame
-        local moveDir = Vector3.new(0,0,0)
-
+        if flyDown then
+            moveVec = moveVec + Vector3.new(0, -1, 0)
+        end
+        -- Move forward/back/left/right based on keys
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then
-            moveDir = moveDir + camCF.LookVector
+            moveVec = moveVec + (camera.CFrame.LookVector * Vector3.new(1,0,1).Unit)
         end
         if UserInputService:IsKeyDown(Enum.KeyCode.S) then
-            moveDir = moveDir - camCF.LookVector
+            moveVec = moveVec - (camera.CFrame.LookVector * Vector3.new(1,0,1).Unit)
         end
         if UserInputService:IsKeyDown(Enum.KeyCode.A) then
-            moveDir = moveDir - camCF.RightVector
+            moveVec = moveVec - (camera.CFrame.RightVector * Vector3.new(1,0,1).Unit)
         end
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then
-            moveDir = moveDir + camCF.RightVector
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-            moveDir = moveDir + Vector3.new(0,1,0)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-            moveDir = moveDir - Vector3.new(0,1,0)
+            moveVec = moveVec + (camera.CFrame.RightVector * Vector3.new(1,0,1).Unit)
         end
 
-        if moveDir.Magnitude > 0 then
-            moveDir = moveDir.Unit * flySpeed
-            flyVelocity.Velocity = moveDir
-            flyGyro.CFrame = CFrame.new(hrp.Position, hrp.Position + camCF.LookVector)
-        else
-            flyVelocity.Velocity = Vector3.new(0,0,0)
-            flyGyro.CFrame = CFrame.new(hrp.Position, hrp.Position + camCF.LookVector)
+        if moveVec.Magnitude > 0 then
+            moveVec = moveVec.Unit * flySpeed
+            hrp.CFrame = hrp.CFrame + moveVec * RunService.Heartbeat:Wait()
         end
     else
-        if flying then
-            flying = false
-            hum.PlatformStand = false
-            if flyVelocity then
-                flyVelocity:Destroy()
-                flyVelocity = nil
-            end
-            if flyGyro then
-                flyGyro:Destroy()
-                flyGyro = nil
-            end
-        end
+        hum.PlatformStand = false
     end
 end)
 
--- Auto Aim logic stub (you can add actual aim code here)
+-- Detect fly up/down keys
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Space then
+        flyUp = true
+    elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
+        flyDown = true
+    end
+end)
+UserInputService.InputEnded:Connect(function(input, gameProcessed)
+    if input.KeyCode == Enum.KeyCode.Space then
+        flyUp = false
+    elseif input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C then
+        flyDown = false
+    end
+end)
+
+-- Auto Aim logic (simple version)
 RunService.RenderStepped:Connect(function()
     if autoAimEnabled then
         local ball = Workspace:FindFirstChild("Ball")
@@ -357,46 +344,7 @@ RunService.RenderStepped:Connect(function()
             hrp.CFrame = CFrame.new(hrp.Position, hrp.Position + Vector3.new(dir.X, 0, dir.Z))
         end
     end
-
-    -- Perfect Aim placeholder
-    if perfectAim then
-        -- Add bat alignment logic here
-    end
-
-    -- Pitch Prediction placeholder
-    if pitchPredictionEnabled then
-        -- Add prediction logic here
-    end
-
-    -- Mag Ball pull
-    if magBallEnabled then
-        local ball = Workspace:FindFirstChild("Ball")
-        local char = LocalPlayer.Character
-        if ball and char and char:FindFirstChild("HumanoidRootPart") then
-            local hrp = char.HumanoidRootPart
-            local bodyPos = ball:FindFirstChild("MagnetForce")
-            if not bodyPos then
-                bodyPos = Instance.new("BodyPosition")
-                bodyPos.Name = "MagnetForce"
-                bodyPos.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-                bodyPos.P = 1e4
-                bodyPos.Parent = ball
-            end
-            bodyPos.Position = hrp.Position + Vector3.new(0, 3, 0)
-        else
-            local ball = Workspace:FindFirstChild("Ball")
-            if ball then
-                local bf = ball:FindFirstChild("MagnetForce")
-                if bf then bf:Destroy() end
-            end
-        end
-    else
-        local ball = Workspace:FindFirstChild("Ball")
-        if ball then
-            local bf = ball:FindFirstChild("MagnetForce")
-            if bf then bf:Destroy() end
-        end
-    end
+    -- Perfect Aim stub here if you want
 end)
 
 -- Auto Hit loop
