@@ -1,6 +1,7 @@
 print("Starting HCBB Util")
 -- Load Orion UI from provided URL
-local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/wx-sources/OrionLibrary/refs/heads/main/orion-imported/OrionLibrary.lua"))()
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/wx-sources/OrionLibrary/main/orion-imported/OrionLibrary.lua"))()
+
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
