@@ -1,3 +1,4 @@
+print("Loading VeaxHub | ERLC")
 --[[
 
 obfuscated @ discord.gg/veaxhub
